@@ -3,8 +3,15 @@
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
 
+#define US_MILLI      1000
+
+#define CLEAR_BTN_PIN 5
+
+#define FILE_NAME "data.csv"
+
 Adafruit_LSM6DSOX lsm6ds;
 Adafruit_LIS3MDL lis3mdl;
+File dataFile;
 
 void test_SD_interface()
 {
@@ -138,8 +145,6 @@ void setup_accel_and_mag()
 {
   Serial.println("Adafruit LSM6DS+LIS3MDL test!");
   bool lsm6ds_success, lis3mdl_success;
-
-  // hardware I2C mode, can pass in address & alt Wire
 
   lsm6ds_success = lsm6ds.begin_I2C();
   lis3mdl_success = lis3mdl.begin_I2C(0x1E);
@@ -325,52 +330,129 @@ void setup_accel_and_mag()
                           true); // enabled!
 }
 
+void halt(const char reason[])
+{
+    Serial.println(reason);
+    while(1);
+}
+
+void halt()
+{
+    while(1);
+}
+
+void setup_sdcard()
+{
+    if(!SD.begin(SD_DETECT_NONE)) {
+        halt("SD Initialization failed.");
+    }
+    dataFile = SD.open(FILE_NAME, FILE_WRITE);
+    if (dataFile) {
+        dataFile.seek(dataFile.size()); //Move to the end of the file for appending.
+    } else {
+        Serial.print("Error opening file "); Serial.println(FILE_NAME);
+        halt();
+    }
+}
+
+void shutdown_sdcard()
+{
+    SD.end();
+}
+
+void setup_gpio()
+{
+    pinMode(CLEAR_BTN_PIN, INPUT_PULLUP);
+    pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void print_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
+{
+  // Display the results (acceleration is measured in m/s^2)
+  Serial.print("\t\tAccel X: ");
+  Serial.print(accel->acceleration.x, 4);
+  Serial.print(" \tY: ");
+  Serial.print(accel->acceleration.y, 4);
+  Serial.print(" \tZ: ");
+  Serial.print(accel->acceleration.z, 4);
+  Serial.println(" \tm/s^2 ");
+
+  // Display the results (rotation is measured in rad/s)
+  Serial.print("\t\tGyro  X: ");
+  Serial.print(gyro->gyro.x, 4);
+  Serial.print(" \tY: ");
+  Serial.print(gyro->gyro.y, 4);
+  Serial.print(" \tZ: ");
+  Serial.print(gyro->gyro.z, 4);
+  Serial.println(" \tradians/s ");
+
+  // Display the results (magnetic field is measured in uTesla)
+  Serial.print(" \t\tMag   X: ");
+  Serial.print(mag->magnetic.x, 4);
+  Serial.print(" \tY: ");
+  Serial.print(mag->magnetic.y, 4);
+  Serial.print(" \tZ: ");
+  Serial.print(mag->magnetic.z, 4);
+  Serial.println(" \tuTesla ");
+
+  Serial.print("\t\tTemp   :\t\t\t\t\t");
+  Serial.print(temp->temperature);
+  Serial.println(" \tdeg C");
+  Serial.println();
+}
+
+void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
+{
+    if (dataFile) {
+        // Accel X m/s^2
+        dataFile.print(accel->acceleration.x, 4); dataFile.print(",");
+        // Accel Y m/s^2
+        dataFile.print(accel->acceleration.y, 4); dataFile.print(",");
+        // Accel Z m/s^2
+        dataFile.print(accel->acceleration.z, 4); dataFile.print(",");
+        // Gyro  X rad/s
+        dataFile.print(gyro->gyro.x, 4); dataFile.print(",");
+        // Gyro Y rad/s
+        dataFile.print(gyro->gyro.y, 4); dataFile.print(",");
+        // Gyro Z rad/s
+        dataFile.print(gyro->gyro.z, 4);
+
+        dataFile.flush();
+    } else {
+        Serial.print("error on file handle");
+    }
+}
+
 void setup()
 {
   Serial.begin(115200);
   while (!Serial) delay(10);
 
-  test_sdcard();
+  setup_sdcard();
   setup_accel_and_mag();
 }
 
 void loop(void)
 {
-  sensors_event_t accel, gyro, mag, temp;
-  //  /* Get new normalized sensor events */
-  lsm6ds.getEvent(&accel, &gyro, &temp);
-  lis3mdl.getEvent(&mag);
+    static sensors_event_t accel, gyro, mag, temp;
+    static int val;
+    static time__t prevTime = 0;
 
-  /* Display the results (acceleration is measured in m/s^2) */
-  Serial.print("\t\tAccel X: ");
-  Serial.print(accel.acceleration.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(accel.acceleration.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(accel.acceleration.z, 4);
-  Serial.println(" \tm/s^2 ");
+    time__t curTime = micros();
+    time__t elapTime = curTime - prevTime;
 
-  /* Display the results (rotation is measured in rad/s) */
-  Serial.print("\t\tGyro  X: ");
-  Serial.print(gyro.gyro.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(gyro.gyro.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(gyro.gyro.z, 4);
-  Serial.println(" \tradians/s ");
+    // Get new normalized sensor events
+    lsm6ds.getEvent(&accel, &gyro, &temp);
+    lis3mdl.getEvent(&mag);
 
-  /* Display the results (magnetic field is measured in uTesla) */
-  Serial.print(" \t\tMag   X: ");
-  Serial.print(mag.magnetic.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(mag.magnetic.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(mag.magnetic.z, 4);
-  Serial.println(" \tuTesla ");
+    print_sensor_data(&accel, &gyro, &mag, &temp);
+    write_sensor_data(&accel, &gyro, &mag, &temp);
 
-  Serial.print("\t\tTemp   :\t\t\t\t\t");
-  Serial.print(temp.temperature);
-  Serial.println(" \tdeg C");
-  Serial.println();
-  delay(1000);
+    if(elapTime > US_MILLI) {
+        val = digitalRead(CLEAR_BTN_PIN);
+        prevTime = curTime;
+        digitalWrite(LED_BUILTIN, val);
+    }
+
+    delay(1);
 }
