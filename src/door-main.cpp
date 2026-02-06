@@ -7,7 +7,7 @@
 
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
-#define US_MILLI      1000
+#define WRITE_DELAY 1000
 
 #define CLEAR_BTN_PIN 5
 
@@ -484,19 +484,21 @@ void setup()
 void loop(void)
 {
     static sensors_event_t accel, gyro, mag, temp;
-    static int val;
     static unsigned long prevTime = 0;
 
     unsigned long curTime = millis();
     unsigned long elapTime = curTime - prevTime;
 
-    // Get new normalized sensor events
-    lsm6ds.getEvent(&accel, &gyro, &temp);
-    lis3mdl.getEvent(&mag);
+    if(elapTime > WRITE_DELAY) {
+        prevTime = curTime;
+        // Get new normalized sensor events
+        lsm6ds.getEvent(&accel, &gyro, &temp);
+        lis3mdl.getEvent(&mag);
+        print_sensor_data(&accel, &gyro, &mag, &temp);
+        write_sensor_data(&accel, &gyro, &mag, &temp);
+    }
 
-    print_sensor_data(&accel, &gyro, &mag, &temp);
-    write_sensor_data(&accel, &gyro, &mag, &temp);
     btn_processButtons();
 
-    delay(100);
+    //delay(10);
 }
