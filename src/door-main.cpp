@@ -2,6 +2,10 @@
 #include <STM32SD.h>
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
+#include "buttons.h"
+
+
+#define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
 #define US_MILLI      1000
 
@@ -9,11 +13,26 @@
 
 #define FILE_NAME "data.csv"
 
-typedef unsigned long time__t;
 
-Adafruit_LSM6DSOX lsm6ds;
-Adafruit_LIS3MDL lis3mdl;
-File dataFile;
+static Adafruit_LSM6DSOX lsm6ds;
+static Adafruit_LIS3MDL lis3mdl;
+static File dataFile;
+static button_handle_t myButton;
+
+static void buttonPress(cck_time_t);
+static void buttonUp(cck_time_t);
+static void buttonDown(cck_time_t);
+static void toggleLED(cck_time_t);
+static void setup_accel_and_mag();
+static void halt(const char reason[]);
+static void halt();
+static void print_file_list();
+static void setup_sdcard();
+static void shutdown_sdcard();
+static void setup_gpio();
+static void print_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+
 
 void test_SD_interface()
 {
@@ -143,7 +162,7 @@ void test_sdcard()
   Serial.println("###### End of the SD tests ######");
 }
 
-void setup_accel_and_mag()
+static void setup_accel_and_mag()
 {
   Serial.println("Adafruit LSM6DS+LIS3MDL test!");
   bool lsm6ds_success, lis3mdl_success;
@@ -332,22 +351,32 @@ void setup_accel_and_mag()
                           true); // enabled!
 }
 
-void halt(const char reason[])
+static void halt(const char reason[])
 {
     Serial.println(reason);
     while(1);
 }
 
-void halt()
+static void halt()
 {
     while(1);
 }
 
-void setup_sdcard()
+static void print_file_list()
+{
+  File root = SD.openRoot();
+  root.ls(LS_R | LS_DATE | LS_SIZE);
+  root.close();
+}
+
+static void setup_sdcard()
 {
     if(!SD.begin(SD_DETECT_NONE)) {
         halt("SD Initialization failed.");
     }
+
+    print_file_list();
+
     dataFile = SD.open(FILE_NAME, FILE_WRITE);
     if (dataFile) {
         dataFile.seek(dataFile.size()); //Move to the end of the file for appending.
@@ -357,18 +386,21 @@ void setup_sdcard()
     }
 }
 
-void shutdown_sdcard()
+static void shutdown_sdcard()
 {
     SD.end();
 }
 
-void setup_gpio()
+static void setup_gpio()
 {
     pinMode(CLEAR_BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
+
+    btn_initButton(&myButton, CLEAR_BTN_PIN, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
+    btn_addButton(&myButton);
 }
 
-void print_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
+static void print_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
 {
   // Display the results (acceleration is measured in m/s^2)
   Serial.print("\t\tAccel X: ");
@@ -403,7 +435,7 @@ void print_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro
   Serial.println();
 }
 
-void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
+static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
 {
     if (dataFile) {
         // Accel X m/s^2
@@ -425,11 +457,26 @@ void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro
     }
 }
 
+static void toggleLED(cck_time_t _)
+{
+    static bool t = LOW;
+    t = !t;
+    digitalWrite(LED_BUILTIN, t);
+}
+
+static void buttonUp(cck_time_t startTime){}
+static void buttonDown(cck_time_t startTime){}
+static void buttonPress(cck_time_t startTime)
+{
+    toggleLED(startTime);
+}
+
 void setup()
 {
   Serial.begin(115200);
   while (!Serial) delay(10);
 
+  setup_gpio();
   setup_sdcard();
   setup_accel_and_mag();
 }
@@ -438,10 +485,10 @@ void loop(void)
 {
     static sensors_event_t accel, gyro, mag, temp;
     static int val;
-    static time__t prevTime = 0;
+    static unsigned long prevTime = 0;
 
-    time__t curTime = micros();
-    time__t elapTime = curTime - prevTime;
+    unsigned long curTime = millis();
+    unsigned long elapTime = curTime - prevTime;
 
     // Get new normalized sensor events
     lsm6ds.getEvent(&accel, &gyro, &temp);
@@ -449,12 +496,7 @@ void loop(void)
 
     print_sensor_data(&accel, &gyro, &mag, &temp);
     write_sensor_data(&accel, &gyro, &mag, &temp);
+    btn_processButtons();
 
-    if(elapTime > US_MILLI) {
-        val = digitalRead(CLEAR_BTN_PIN);
-        prevTime = curTime;
-        digitalWrite(LED_BUILTIN, val);
-    }
-
-    delay(1);
+    delay(100);
 }

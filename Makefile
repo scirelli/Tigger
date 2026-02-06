@@ -44,7 +44,7 @@ GCC_VERSION     := 14.2.1-1.1
 
 # Project settings
 TARGET          := door-main
-SRC_DIR         := .
+SRC_DIR         := src
 BUILD_DIR       := build
 
 # ============================================================================
