@@ -8,9 +8,13 @@
 #   make              - Build the project
 #   make upload       - Build and upload via DFU
 #   make clean        - Clean build artifacts
+#   make clean-tools  - Remove installed toolchain and libraries
 #   make install-deps - Install toolchain and STM32 core (prompts first)
-#   make check-deps   - Check if dependencies are installed
+#   make install-libs - Clone library dependencies from GitHub
+#   make update-libs  - Pull latest library code
+#   make check-deps   - Check if all dependencies are installed
 #   make print-vars   - Debug: print configuration variables
+#   make help         - Show this help message
 
 # =============================================================================
 # OPTIMIZATION #
@@ -43,7 +47,10 @@ USER_LIBS       := $(TOOLS_DIR)/libraries
 # Versions
 STM32_CORE_VERSION := 2.12.0
 ARM_GCC_VERSION    := 14.2.rel1
-CMSIS_VERSION      := 5.9.0
+CMSIS_VERSION      := 6.2.0
+CMSIS_MAJOR        := $(firstword $(subst ., ,$(CMSIS_VERSION)))
+CMSIS_REPO         := CMSIS_$(CMSIS_MAJOR)
+CMSIS_URL          := https://github.com/ARM-software/$(CMSIS_REPO).git
 
 # Project settings
 TARGET          := door-main
@@ -73,11 +80,11 @@ AR              := $(TOOLCHAIN_PATH)/arm-none-eabi-ar
 # ============================================================================
 # STM32 Core paths (downloaded from GitHub)
 # ============================================================================
-STM32_CORE      := $(TOOLS_DIR)/Arduino_Core_STM32-$(STM32_CORE_VERSION)
-STM32_CORE_URL  := https://github.com/stm32duino/Arduino_Core_STM32/archive/refs/tags/$(STM32_CORE_VERSION).tar.gz
+STM32_CORE      := $(TOOLS_DIR)/Arduino_Core_STM32
+STM32_CORE_URL  := https://github.com/stm32duino/Arduino_Core_STM32.git
 
 # CMSIS paths (inside STM32 core)
-CMSIS           := $(STM32_CORE)/system/Drivers/CMSIS/Core/Include
+CMSIS           := $(TOOLS_DIR)/$(CMSIS_REPO)/CMSIS/Core/Include
 CMSIS_DSP       := $(STM32_CORE)/system/Drivers/CMSIS/DSP
 CMSIS_DEVICE    := $(STM32_CORE)/system/Drivers/CMSIS/Device/ST/STM32F4xx
 
@@ -146,7 +153,8 @@ INCLUDES := \
 	-I$(USER_LIBS)/Adafruit_LSM6DS \
 	-I$(USER_LIBS)/Adafruit_BusIO \
 	-I$(USER_LIBS)/Adafruit_Unified_Sensor \
-	-I$(USER_LIBS)/Adafruit_LIS3MDL
+	-I$(USER_LIBS)/Adafruit_LIS3MDL \
+	-I$(USER_LIBS)/Adafruit_NeoPixel
 
 # ============================================================================
 # Compiler flags
@@ -227,7 +235,8 @@ ADAFRUIT_SRCS := \
 	$(USER_LIBS)/Adafruit_BusIO/Adafruit_I2CDevice.cpp \
 	$(USER_LIBS)/Adafruit_BusIO/Adafruit_SPIDevice.cpp \
 	$(USER_LIBS)/Adafruit_Unified_Sensor/Adafruit_Sensor.cpp \
-	$(USER_LIBS)/Adafruit_LIS3MDL/Adafruit_LIS3MDL.cpp
+	$(USER_LIBS)/Adafruit_LIS3MDL/Adafruit_LIS3MDL.cpp \
+	$(USER_LIBS)/Adafruit_NeoPixel/Adafruit_NeoPixel.cpp
 
 # Platform library sources - Wire
 WIRE_SRCS := \
@@ -447,25 +456,40 @@ $(BUILD_DIR)/libs:
 $(BUILD_DIR)/core:
 	mkdir -p $(BUILD_DIR)/core
 
+## Show binary size information
 size: $(BUILD_DIR)/$(TARGET).elf
 	@echo ""
 	@echo "Size:"
 	$(SIZE) -A $<
 
+## Build and upload firmware via DFU
 upload: $(BUILD_DIR)/$(TARGET).bin
 	@echo "Uploading via DFU..."
 	dfu-util --alt 0 --dfuse-address 0x08000000:leave --download $<
 
+## Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
 
+## Show this help message
+help:
+	@echo "STM32F405 Feather Makefile"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //' | while read -r desc; do \
+		read -r target < /dev/stdin 2>/dev/null || true; \
+	done; \
+	grep -E '^##|^[a-zA-Z_-]+:' $(MAKEFILE_LIST) | \
+	awk '/^## / { desc=substr($$0,4) } /^[a-zA-Z_-]+:/ { if (desc) { target=$$1; gsub(/:.*/, "", target); printf "  %-18s %s\n", target, desc; desc="" } }'
+
+## Open serial monitor
 monitor:
 	@echo "Opening serial monitor on $(SERIAL_PORT) at $(BAUD_RATE) baud..."
 	@stty $(STTY_FLAG) $(SERIAL_PORT) $(BAUD_RATE) raw -clocal -echo
 	@cat $(SERIAL_PORT)
 
-# Send: Send a message to the serial port
-# Usage: make send MSG="Hello World"
+## Send message to serial port (MSG=x)
 send:
 	@if [ -z "$(MSG)" ]; then \
 		echo "Usage: make send MSG=\"Your Message\""; \
@@ -475,7 +499,7 @@ send:
 		echo "$(MSG)" > $(SERIAL_PORT); \
 	fi
 
-# Term: Interactive session (requires 'screen' installed)
+## Interactive terminal (requires screen)
 term:
 	@echo "Opening interactive terminal on $(SERIAL_PORT)..."
 	@echo "Press Ctrl+A then K to exit."
@@ -522,17 +546,18 @@ run-arduino: stm32cube
 TOOLCHAIN_EXISTS := $(shell test -x "$(CC)" && echo yes || echo no)
 STM32_CORE_EXISTS := $(shell test -d "$(STM32_CORE)/cores/arduino" && echo yes || echo no)
 
-check-deps:
-	@echo "=== Dependency Check ==="
-	@echo "Toolchain: $(if $(filter yes,$(TOOLCHAIN_EXISTS)),INSTALLED at $(TOOLCHAIN_PATH),NOT FOUND)"
-	@echo "STM32 Core: $(if $(filter yes,$(STM32_CORE_EXISTS)),INSTALLED at $(STM32_CORE),NOT FOUND)"
+## Check if all dependencies are installed
+check-deps: check-libs
+	@echo ""
+	@echo "=== Toolchain Check ==="
+	@echo "Toolchain: $(if $(filter yes,$(TOOLCHAIN_EXISTS)),INSTALLED,NOT FOUND)"
+	@echo "STM32 Core: $(if $(filter yes,$(STM32_CORE_EXISTS)),INSTALLED,NOT FOUND)"
 	@echo ""
 	@if [ "$(TOOLCHAIN_EXISTS)" = "no" ] || [ "$(STM32_CORE_EXISTS)" = "no" ]; then \
-		echo "Run 'make install-deps' to install missing dependencies."; \
-	else \
-		echo "All dependencies installed!"; \
+		echo "Run 'make install-deps' to install toolchain/core."; \
 	fi
 
+## Install ARM toolchain and STM32 core
 install-deps: prompt-install
 
 prompt-install:
@@ -549,7 +574,7 @@ prompt-install:
 		echo "Installation cancelled."; \
 	fi
 
-do-install-deps: install-toolchain install-stm32-core
+do-install-deps: install-toolchain install-stm32-core install-libs
 	@echo ""
 	@echo "=== Installation Complete ==="
 	@echo "You can now run 'make' to build your project."
@@ -574,21 +599,81 @@ install-stm32-core:
 	else \
 		echo "=== Installing STM32 Arduino Core ===" && \
 		mkdir -p $(TOOLS_DIR) && \
-		echo "Downloading STM32 Core $(STM32_CORE_VERSION)..." && \
-		curl -L -o $(TOOLS_DIR)/stm32-core.tar.gz "$(STM32_CORE_URL)" && \
-		echo "Extracting STM32 Core..." && \
-		tar -xzf $(TOOLS_DIR)/stm32-core.tar.gz -C $(TOOLS_DIR) && \
-		rm $(TOOLS_DIR)/stm32-core.tar.gz && \
+		echo "Cloning STM32 Core $(STM32_CORE_VERSION)..." && \
+		git clone --branch $(STM32_CORE_VERSION) --depth 1 "$(STM32_CORE_URL)" "$(STM32_CORE)" && \
+		echo "Cloning CMSIS $(CMSIS_VERSION)..." && \
+		git clone --branch v$(CMSIS_VERSION) --depth 1 "$(CMSIS_URL)" "$(TOOLS_DIR)/$(CMSIS_REPO)" && \
 		echo "STM32 Core installed to $(STM32_CORE)"; \
 	fi
 
-# Force reinstall (removes existing and reinstalls)
 .PHONY: reinstall-deps clean-tools
-	reinstall-deps: clean-tools install-deps
 
+## Clean and reinstall all dependencies
+reinstall-deps: clean-tools install-deps
+
+## Remove installed toolchain and libraries
 clean-tools:
 	@echo "Removing tools directory..."
 	rm -rf $(TOOLS_DIR)
+
+# =============================================================================
+# Library Dependencies (cloned from GitHub)
+# =============================================================================
+.PHONY: install-libs update-libs check-libs
+
+# Library repositories (name::url format)
+LIB_REPOS := \
+	Adafruit_LIS3MDL::https://github.com/adafruit/Adafruit_LIS3MDL.git \
+	Adafruit_LSM6DS::https://github.com/adafruit/Adafruit_LSM6DS.git \
+	Adafruit_BusIO::https://github.com/adafruit/Adafruit_BusIO.git \
+	Adafruit_Unified_Sensor::https://github.com/adafruit/Adafruit_Sensor.git \
+	Adafruit_NeoPixel::https://github.com/adafruit/Adafruit_NeoPixel.git \
+	STM32duino_STM32SD::https://github.com/stm32duino/STM32SD.git \
+	FatFs::https://github.com/stm32duino/FatFs.git
+
+## Check library installation status
+check-libs:
+	@echo "=== Library Check ==="
+	@for repo in $(LIB_REPOS); do \
+		name=$${repo%%::*}; \
+		if [ -d "$(USER_LIBS)/$$name" ]; then \
+			echo "  $$name: INSTALLED"; \
+		else \
+			echo "  $$name: NOT FOUND"; \
+		fi; \
+	done
+
+## Clone library dependencies from GitHub
+install-libs:
+	@echo "=== Installing Libraries ==="
+	@mkdir -p $(USER_LIBS)
+	@for repo in $(LIB_REPOS); do \
+		name=$${repo%%::*}; \
+		url=$${repo##*::}; \
+		if [ -d "$(USER_LIBS)/$$name" ]; then \
+			echo "$$name already installed, skipping..."; \
+		else \
+			echo "Cloning $$name..."; \
+			git clone --depth 1 "$$url" "$(USER_LIBS)/$$name"; \
+		fi; \
+	done
+	@echo ""
+	@echo "Libraries installed to $(USER_LIBS)"
+
+## Pull latest library code
+update-libs:
+	@echo "=== Updating Libraries ==="
+	@for repo in $(LIB_REPOS); do \
+		name=$${repo%%::*}; \
+		if [ -d "$(USER_LIBS)/$$name" ]; then \
+			echo "Updating $$name..."; \
+			cd "$(USER_LIBS)/$$name" && git pull; \
+		else \
+			echo "$$name not installed, skipping..."; \
+		fi; \
+	done
+	@echo ""
+	@echo "Libraries updated."
 
 # =============================================================================
 
@@ -596,6 +681,7 @@ clean-tools:
 # ============================================================================
 # Debug helpers
 # ============================================================================
+## Print configuration variables
 .PHONY: print-vars
 print-vars:
 	@echo "=== Configuration ==="
