@@ -57,6 +57,16 @@ TARGET          := door-main
 SRC_DIR         := src
 BUILD_DIR       := build
 
+# Debug mode (use DEBUG=1 for debug build)
+DEBUG           ?= 0
+ifeq ($(DEBUG),1)
+    OPT_FLAGS   := -Og -g3
+    STRIP_FLAGS :=
+else
+    OPT_FLAGS   := -Os
+    STRIP_FLAGS := -Wl,--strip-debug
+endif
+
 # ============================================================================
 # Toolchain paths (local installation)
 # ============================================================================
@@ -159,7 +169,7 @@ INCLUDES := \
 # ============================================================================
 # Compiler flags
 # ============================================================================
-COMMON_FLAGS    := $(CPU_FLAGS) $(DEFINES) $(INCLUDES) -Os -ffunction-sections -fdata-sections
+COMMON_FLAGS    := $(CPU_FLAGS) $(DEFINES) $(INCLUDES) $(OPT_FLAGS) -w -ffunction-sections -fdata-sections
 
 CFLAGS          := $(COMMON_FLAGS) -std=gnu11
 
@@ -179,7 +189,8 @@ LDSCRIPT_SYSTEM  := $(STM32_CORE)/system/ldscript.ld
 
 LDFLAGS := \
 	$(CPU_FLAGS) \
-	-Os \
+    $(OPT_FLAGS) \
+    $(STRIP_FLAGS) \
 	--specs=nano.specs \
 	-Wl,--defsym=LD_FLASH_OFFSET=0x0 \
 	-Wl,--defsym=LD_MAX_SIZE=1048576 \
