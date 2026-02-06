@@ -14,6 +14,17 @@ The Makefile for this project still depends on the Arduino tool chain and you wi
     * https://github.com/stm32duino/FatFs 
 * 
 
+```
+project/
+├── Makefile
+├── src/
+└── tools/
+    ├── arm-gnu-toolchain-14.2.rel1-.../
+    ├── Arduino_Core_STM32-2.12.0/
+    └── libraries -> ~/Arduino/libraries  (symlink)
+```
+
+
 
 ## Notes
 ```
