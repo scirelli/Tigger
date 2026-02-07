@@ -15,14 +15,17 @@
 #   make check-deps   - Check if all dependencies are installed
 #   make print-vars   - Debug: print configuration variables
 #   make help         - Show this help message
+#
+# To add project-specific dependencies, create a dependencies.mk file.
+# See dependencies.mk.example for the format.
 
 # =============================================================================
-# OPTIMIZATION #
+# OPTIMIZATION
 # =============================================================================
 MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 1)
 
 # =============================================================================
-# PROJECT SETTINGS
+# PROJECT SETTINGS (can be overridden by dependencies.mk)
 # =============================================================================
 OS := $(shell uname -s)
 export PATH := $(PATH):$(shell pwd)/stm32cube/bin
@@ -52,10 +55,20 @@ CMSIS_MAJOR        := $(firstword $(subst ., ,$(CMSIS_VERSION)))
 CMSIS_REPO         := CMSIS_$(CMSIS_MAJOR)
 CMSIS_URL          := https://github.com/ARM-software/$(CMSIS_REPO).git
 
-# Project settings
-TARGET          := door-main
+# Project settings (defaults - can be overridden in dependencies.mk)
+TARGET          ?= firmware
 SRC_DIR         := src
 BUILD_DIR       := build
+
+# =============================================================================
+# Include project-specific dependencies (optional)
+# =============================================================================
+# The dependencies.mk file defines:
+#   - TARGET: Project name
+#   - DEP_REPOS: Library dependencies in format name::url::subdir
+#   - DEP_EXTRA_C_SRCS, DEP_EXTRA_CPP_SRCS: Additional source files
+#   - DEP_EXCLUDE_PATTERNS: Patterns to exclude from auto-discovery
+-include dependencies.mk
 
 # Debug mode (use DEBUG=1 for debug build)
 DEBUG           ?= 0
@@ -131,7 +144,8 @@ DEFINES := \
 # ============================================================================
 # Include paths
 # ============================================================================
-INCLUDES := \
+# Core includes (always needed for STM32F405)
+CORE_INCLUDES := \
 	-I$(SRC_DIR) \
 	-I$(STM32_CORE)/cores/arduino \
 	-I$(STM32_CORE)/cores/arduino/avr \
@@ -156,15 +170,25 @@ INCLUDES := \
 	-I$(STM32_CORE)/system/Middlewares/OpenAMP \
 	-I$(STM32_CORE)/system/Middlewares/OpenAMP/open-amp/lib/include \
 	-I$(STM32_CORE)/system/Middlewares/OpenAMP/libmetal/lib/include \
-	-I$(STM32_CORE)/system/Middlewares/OpenAMP/virtual_driver \
-	-I$(USER_LIBS)/STM32duino_STM32SD/src \
-	-I$(USER_LIBS)/FatFs/src \
-	-I$(USER_LIBS)/FatFs/src/drivers \
-	-I$(USER_LIBS)/Adafruit_LSM6DS \
-	-I$(USER_LIBS)/Adafruit_BusIO \
-	-I$(USER_LIBS)/Adafruit_Unified_Sensor \
-	-I$(USER_LIBS)/Adafruit_LIS3MDL \
-	-I$(USER_LIBS)/Adafruit_NeoPixel
+	-I$(STM32_CORE)/system/Middlewares/OpenAMP/virtual_driver
+
+# =============================================================================
+# Auto-generated library includes from DEP_REPOS
+# =============================================================================
+# Extract library names from DEP_REPOS (format: name::url::subdir)
+DEP_NAMES := $(foreach dep,$(DEP_REPOS),$(firstword $(subst ::, ,$(dep))))
+
+# Generate include paths for each dependency
+# Includes both the library root and src subdirectory if it exists
+DEP_INCLUDES := $(foreach name,$(DEP_NAMES),\
+	-I$(USER_LIBS)/$(name) \
+	-I$(USER_LIBS)/$(name)/src)
+
+# Additional hardcoded includes for libraries with non-standard layouts
+DEP_EXTRA_INCLUDES := \
+	-I$(USER_LIBS)/FatFs/src/drivers
+
+INCLUDES := $(CORE_INCLUDES) $(DEP_INCLUDES) $(DEP_EXTRA_INCLUDES)
 
 # ============================================================================
 # Compiler flags
@@ -215,39 +239,37 @@ LDLIBS := -lc -lm -lgcc -lstdc++
 PROJECT_CPP_SRCS := $(wildcard $(SRC_DIR)/*.cpp)
 PROJECT_C_SRCS   := $(wildcard $(SRC_DIR)/*.c)
 
-# Library sources - STM32SD
-STM32SD_SRCS := \
-	$(USER_LIBS)/STM32duino_STM32SD/src/SD.cpp \
-	$(USER_LIBS)/STM32duino_STM32SD/src/Sd2Card.cpp \
-	$(USER_LIBS)/STM32duino_STM32SD/src/SdFatFs.cpp \
-	$(USER_LIBS)/STM32duino_STM32SD/src/bsp_sd.c
+# =============================================================================
+# Auto-discovered library sources from DEP_REPOS
+# =============================================================================
+# Helper function to get source directory for a dependency
+# Usage: $(call get_src_dir,name::url::subdir) -> $(USER_LIBS)/name/subdir or $(USER_LIBS)/name
+define get_dep_src_dir
+$(strip \
+  $(eval _parts := $(subst ::, ,$(1))) \
+  $(eval _name := $(word 1,$(_parts))) \
+  $(eval _subdir := $(word 3,$(_parts))) \
+  $(if $(_subdir),$(USER_LIBS)/$(_name)/$(_subdir),$(USER_LIBS)/$(_name)) \
+)
+endef
 
-# Library sources - FatFs
-FATFS_SRCS := \
-	$(USER_LIBS)/FatFs/src/diskio.c \
-	$(USER_LIBS)/FatFs/src/drivers/sd_diskio.c \
-	$(USER_LIBS)/FatFs/src/ff.c \
-	$(USER_LIBS)/FatFs/src/ff_gen_drv.c \
-	$(USER_LIBS)/FatFs/src/ffsystem.c \
-	$(USER_LIBS)/FatFs/src/ffunicode.c
+# Collect all source directories from DEP_REPOS
+DEP_SRC_DIRS := $(foreach dep,$(DEP_REPOS),$(call get_dep_src_dir,$(dep)))
 
-# Library sources - Adafruit
-ADAFRUIT_SRCS := \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DS.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DSOX.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_ISM330DHCX.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DS3.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DS33.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DS3TRC.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DSL.cpp \
-	$(USER_LIBS)/Adafruit_LSM6DS/Adafruit_LSM6DSO32.cpp \
-	$(USER_LIBS)/Adafruit_BusIO/Adafruit_BusIO_Register.cpp \
-	$(USER_LIBS)/Adafruit_BusIO/Adafruit_GenericDevice.cpp \
-	$(USER_LIBS)/Adafruit_BusIO/Adafruit_I2CDevice.cpp \
-	$(USER_LIBS)/Adafruit_BusIO/Adafruit_SPIDevice.cpp \
-	$(USER_LIBS)/Adafruit_Unified_Sensor/Adafruit_Sensor.cpp \
-	$(USER_LIBS)/Adafruit_LIS3MDL/Adafruit_LIS3MDL.cpp \
-	$(USER_LIBS)/Adafruit_NeoPixel/Adafruit_NeoPixel.cpp
+# Auto-discover .c and .cpp files from dependency source directories
+# Only include files that exist (wildcard returns empty for non-existent paths)
+DEP_AUTO_C_SRCS := $(foreach dir,$(DEP_SRC_DIRS),$(wildcard $(dir)/*.c))
+DEP_AUTO_CPP_SRCS := $(foreach dir,$(DEP_SRC_DIRS),$(wildcard $(dir)/*.cpp))
+
+# Apply exclusion patterns if defined
+ifdef DEP_EXCLUDE_PATTERNS
+DEP_AUTO_C_SRCS := $(filter-out $(DEP_EXCLUDE_PATTERNS),$(DEP_AUTO_C_SRCS))
+DEP_AUTO_CPP_SRCS := $(filter-out $(DEP_EXCLUDE_PATTERNS),$(DEP_AUTO_CPP_SRCS))
+endif
+
+# Combine auto-discovered and extra sources
+DEP_C_SRCS := $(DEP_AUTO_C_SRCS) $(DEP_EXTRA_C_SRCS)
+DEP_CPP_SRCS := $(DEP_AUTO_CPP_SRCS) $(DEP_EXTRA_CPP_SRCS)
 
 # Platform library sources - Wire
 WIRE_SRCS := \
@@ -356,10 +378,10 @@ ARDUINO_CORE_C_SRCS := \
 # Note: wiring_pulse is actually a .cpp file
 ARDUINO_CORE_CPP_SRCS += $(ARDUINO_CORE_DIR)/wiring_pulse.cpp
 
-# Combine all library sources (user libraries)
+# Combine all library sources (user libraries + platform libraries)
 # Note: VARIANT_SRCS are compiled into core.a, not as separate library objects
-LIB_CPP_SRCS := $(filter %.cpp,$(STM32SD_SRCS) $(ADAFRUIT_SRCS) $(WIRE_SRCS) $(SPI_SRCS) $(USBDEVICE_SRCS))
-LIB_C_SRCS   := $(filter %.c,$(STM32SD_SRCS) $(FATFS_SRCS) $(WIRE_SRCS) $(SPI_SRCS) $(USBDEVICE_SRCS))
+LIB_CPP_SRCS := $(DEP_CPP_SRCS) $(filter %.cpp,$(WIRE_SRCS) $(SPI_SRCS) $(USBDEVICE_SRCS))
+LIB_C_SRCS   := $(DEP_C_SRCS) $(filter %.c,$(WIRE_SRCS) $(SPI_SRCS) $(USBDEVICE_SRCS))
 
 # ============================================================================
 # Object files
@@ -390,7 +412,8 @@ CORE_OBJS += $(patsubst %.cpp,$(BUILD_DIR)/core/%.o,$(notdir $(filter %.cpp,$(VA
 # ============================================================================
 # VPATH for library and core sources
 # ============================================================================
-VPATH := $(sort $(dir $(LIB_CPP_SRCS) $(LIB_C_SRCS) $(SRCWRAPPER_C_SRCS) $(SRCWRAPPER_CPP_SRCS) $(ASM_SRCS) $(ARDUINO_CORE_C_SRCS) $(ARDUINO_CORE_CPP_SRCS) $(VARIANT_SRCS)))
+# Include all directories where source files are located
+VPATH := $(sort $(dir $(LIB_CPP_SRCS) $(LIB_C_SRCS) $(SRCWRAPPER_C_SRCS) $(SRCWRAPPER_CPP_SRCS) $(ASM_SRCS) $(ARDUINO_CORE_C_SRCS) $(ARDUINO_CORE_CPP_SRCS) $(VARIANT_SRCS)) $(DEP_SRC_DIRS))
 
 # ============================================================================
 # Assembly flags
@@ -488,10 +511,10 @@ help:
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
-	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //' | while read -r desc; do \
+	@grep -hE '^## ' $(MAKEFILE_LIST) | sed 's/^## //' | while read -r desc; do \
 		read -r target < /dev/stdin 2>/dev/null || true; \
 	done; \
-	grep -E '^##|^[a-zA-Z_-]+:' $(MAKEFILE_LIST) | \
+	grep -hE '^##|^[a-zA-Z_-]+:' $(MAKEFILE_LIST) | \
 	awk '/^## / { desc=substr($$0,4) } /^[a-zA-Z_-]+:/ { if (desc) { target=$$1; gsub(/:.*/, "", target); printf "  %-18s %s\n", target, desc; desc="" } }'
 
 ## Open serial monitor
@@ -632,59 +655,69 @@ clean-tools:
 # =============================================================================
 .PHONY: install-libs update-libs check-libs
 
-# Library repositories (name::url format)
-LIB_REPOS := \
-	Adafruit_LIS3MDL::https://github.com/adafruit/Adafruit_LIS3MDL.git \
-	Adafruit_LSM6DS::https://github.com/adafruit/Adafruit_LSM6DS.git \
-	Adafruit_BusIO::https://github.com/adafruit/Adafruit_BusIO.git \
-	Adafruit_Unified_Sensor::https://github.com/adafruit/Adafruit_Sensor.git \
-	Adafruit_NeoPixel::https://github.com/adafruit/Adafruit_NeoPixel.git \
-	STM32duino_STM32SD::https://github.com/stm32duino/STM32SD.git \
-	FatFs::https://github.com/stm32duino/FatFs.git
+# Parse DEP_REPOS (format: name::url::subdir) to extract name and url
+# Helper to extract URL from a dependency entry
+# The URL is the second field: name::URL::subdir
+define get_dep_url
+$(strip $(word 2,$(subst ::, ,$(1))))
+endef
 
 ## Check library installation status
 check-libs:
 	@echo "=== Library Check ==="
-	@for repo in $(LIB_REPOS); do \
-		name=$${repo%%::*}; \
-		if [ -d "$(USER_LIBS)/$$name" ]; then \
-			echo "  $$name: INSTALLED"; \
-		else \
-			echo "  $$name: NOT FOUND"; \
-		fi; \
-	done
+	@if [ -z "$(DEP_REPOS)" ]; then \
+		echo "  No dependencies defined (no dependencies.mk or DEP_REPOS empty)"; \
+	else \
+		for dep in $(DEP_REPOS); do \
+			name=$${dep%%::*}; \
+			if [ -d "$(USER_LIBS)/$$name" ]; then \
+				echo "  $$name: INSTALLED"; \
+			else \
+				echo "  $$name: NOT FOUND"; \
+			fi; \
+		done; \
+	fi
 
 ## Clone library dependencies from GitHub
 install-libs:
 	@echo "=== Installing Libraries ==="
-	@mkdir -p $(USER_LIBS)
-	@for repo in $(LIB_REPOS); do \
-		name=$${repo%%::*}; \
-		url=$${repo##*::}; \
-		if [ -d "$(USER_LIBS)/$$name" ]; then \
-			echo "$$name already installed, skipping..."; \
-		else \
-			echo "Cloning $$name..."; \
-			git clone --depth 1 "$$url" "$(USER_LIBS)/$$name"; \
-		fi; \
-	done
-	@echo ""
-	@echo "Libraries installed to $(USER_LIBS)"
+	@if [ -z "$(DEP_REPOS)" ]; then \
+		echo "No dependencies defined (no dependencies.mk or DEP_REPOS empty)"; \
+	else \
+		mkdir -p $(USER_LIBS); \
+		for dep in $(DEP_REPOS); do \
+			name=$${dep%%::*}; \
+			rest=$${dep#*::}; \
+			url=$${rest%%::*}; \
+			if [ -d "$(USER_LIBS)/$$name" ]; then \
+				echo "$$name already installed, skipping..."; \
+			else \
+				echo "Cloning $$name from $$url..."; \
+				git clone --depth 1 "$$url" "$(USER_LIBS)/$$name"; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "Libraries installed to $(USER_LIBS)"; \
+	fi
 
 ## Pull latest library code
 update-libs:
 	@echo "=== Updating Libraries ==="
-	@for repo in $(LIB_REPOS); do \
-		name=$${repo%%::*}; \
-		if [ -d "$(USER_LIBS)/$$name" ]; then \
-			echo "Updating $$name..."; \
-			cd "$(USER_LIBS)/$$name" && git pull; \
-		else \
-			echo "$$name not installed, skipping..."; \
-		fi; \
-	done
-	@echo ""
-	@echo "Libraries updated."
+	@if [ -z "$(DEP_REPOS)" ]; then \
+		echo "No dependencies defined (no dependencies.mk or DEP_REPOS empty)"; \
+	else \
+		for dep in $(DEP_REPOS); do \
+			name=$${dep%%::*}; \
+			if [ -d "$(USER_LIBS)/$$name" ]; then \
+				echo "Updating $$name..."; \
+				cd "$(USER_LIBS)/$$name" && git pull; \
+			else \
+				echo "$$name not installed, skipping..."; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "Libraries updated."; \
+	fi
 
 # =============================================================================
 
@@ -704,6 +737,12 @@ print-vars:
 	@echo "=== Dependencies ==="
 	@echo "Toolchain installed: $(TOOLCHAIN_EXISTS)"
 	@echo "STM32 Core installed: $(STM32_CORE_EXISTS)"
+	@echo ""
+	@echo "=== Project Dependencies (from dependencies.mk) ==="
+	@echo "DEP_NAMES: $(DEP_NAMES)"
+	@echo "DEP_SRC_DIRS: $(DEP_SRC_DIRS)"
+	@echo "DEP_C_SRCS count: $(words $(DEP_C_SRCS))"
+	@echo "DEP_CPP_SRCS count: $(words $(DEP_CPP_SRCS))"
 	@echo ""
 	@echo "=== Build ==="
 	@echo "TARGET: $(TARGET)"
