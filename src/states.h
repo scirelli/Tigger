@@ -32,7 +32,7 @@ typedef enum {
 } state_evt_act_status_t;
 
 typedef int8_t state_id_t;
-typedef int8_t state_event_t;
+typedef int8_t state_event_id_t;
 typedef struct state_t state_t;
 
 /*
@@ -58,7 +58,7 @@ typedef state_hndlr_status_t (*stateExitHandler_t)(state_t*, cck_time_t); //Stat
  * stateEventHandler_t
  * sets the state's event handler. This handler will be called when events are fired on the state machine.
  */
-typedef void (*stateEventHandler_t)(state_t*, state_event_t, cck_time_t);
+typedef void (*stateEventHandler_t)(state_t*, state_event_id_t, cck_time_t);
 
 struct state_t{
     state_id_t state_id;
@@ -76,8 +76,9 @@ typedef struct {
 
 static state_trans_status_t state_transition(state_machine_t *, state_t *next_state, cck_time_t t);
 
+bool state_init_machine(state_machine_t*, state_t *);
 state_proc_status_t state_machine_run(state_machine_t *, cck_time_t);
-bool state_fire_event(state_machine_t *, state_event_t, cck_time_t);
+bool state_fire_event(state_machine_t *, state_event_id_t, cck_time_t);
 
 #ifdef __cplusplus
 }

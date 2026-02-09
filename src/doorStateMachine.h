@@ -26,13 +26,39 @@ extern "C"
 
 typedef void (*door_event_handler_t)(cck_time_t);
 
-typedef enum: state_event_t  {
+//typedef void (*door_event_handler_fnc_t)(cck_time_t);
+//typedef struct {
+//   door_event_handler_fnc_t,
+//   void *params;
+//} door_event_handler_t;
+
+typedef enum:state_id_t {
+    PRE_IDLE = 0,
+    IDLE,
+    PRE_NEW_FILE,
+    NEW_FILE,
+    PRE_READ_SENSORS,
+    READ_SENSORS,
+    _DOOR_STATE_COUNT
+} door_states_id_t;
+
+typedef enum: state_event_id_t  {
     DOOR_EVENT_BUTTON_1_PRESS = 0,
     _DOOR_EVENT_COUNT
 } door_events_t;
 
-extern state_machine_t  door_state_machine;
-extern door_event_handler_t idle_event_handlers[_DOOR_EVENT_COUNT];
+typedef struct {
+    state_t state;
+    door_event_handler_t event_handlers[_DOOR_EVENT_COUNT];
+} door_state_t;
+
+bool setup_door_state_machine(state_machine_t *);
+bool door_set_event_handle(door_states_id_t, door_events_t, door_event_handler_t);
+
+
+static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt, cck_time_t t);
+static bool is_valid_door_state_id(door_states_id_t);
+static bool is_valid_door_event_id(door_events_t);
 
 #ifdef __cplusplus
 }

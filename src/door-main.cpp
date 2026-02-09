@@ -30,6 +30,7 @@ static Adafruit_LIS3MDL lis3mdl;
 static File dataFile;
 static button_handle_t onlyButton;
 static Adafruit_NeoPixel builtInNeo(1, BUILT_IN_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+static state_machine_t door_state_machine;
 
 static void buttonPress(cck_time_t);
 static void buttonUp(cck_time_t);
@@ -291,7 +292,8 @@ static void buttonPress(cck_time_t startTime)
     state_fire_event(&door_state_machine, DOOR_EVENT_BUTTON_1_PRESS, startTime);
 }
 
-static void setup_buttons() {
+static void setup_buttons()
+{
     btn_initButton(&onlyButton, CLEAR_BTN_PIN, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
     btn_addButton(&onlyButton);
 }
@@ -368,7 +370,14 @@ static void toggleLED(cck_time_t _)
 }
 
 static void setup_state_machine() {
-    idle_event_handlers[DOOR_EVENT_BUTTON_1_PRESS] = toggleLED;
+    if(!setup_door_state_machine(&door_state_machine)) {
+        Serial.println("Error failed to setup door state machine");
+        return;
+    }
+    if(!door_set_event_handle(IDLE, DOOR_EVENT_BUTTON_1_PRESS, toggleLED)) {
+        Serial.println("Error failed to set state event handler DOOR_EVENT_BUTTON_1_PRESS");
+        return;
+    }
 }
 
 void setup()
