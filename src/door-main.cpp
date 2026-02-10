@@ -21,7 +21,9 @@
 #define CLEAR_BTN_PIN       5
 #define VBAT_PIN            (A6)  // Pin for reading battery voltage
 #define BUILT_IN_PIXEL_PIN  8
-
+#define BUTTON_A            PA15 //CS
+#define BUTTON_B            PC7
+#define BUTTON_C            PC5
 #define FILE_NAME "data.csv"
 
 
@@ -304,6 +306,9 @@ static void setup_gpio()
 {
     pinMode(CLEAR_BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(BUTTON_A, INPUT_PULLUP);
+    pinMode(BUTTON_B, INPUT_PULLUP);
+    pinMode(BUTTON_C, INPUT_PULLUP);
     setup_buttons();
 }
 
