@@ -4,6 +4,11 @@
 #include <Adafruit_LIS3MDL.h>
 #include <Adafruit_NeoPixel.h>
 #include <stdbool.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
+
 #include "buttons.h"
 #include "cck_types.h"
 #include "states.h"
@@ -17,22 +22,26 @@
 
 #define NUMPIXELS         1
 
+#define I2C_LIS3MDL_ADDRESS 0x1E
+#define I2C_LSM6DS_ADDRESS  0x6A // D0 Pull high for 0x6B
+
 //==== Pin out ====
-#define CLEAR_BTN_PIN       5
+//#define CLEAR_BTN_PIN       5
 #define VBAT_PIN            (A6)  // Pin for reading battery voltage
 #define BUILT_IN_PIXEL_PIN  8
-#define BUTTON_A            PA15 //CS
-#define BUTTON_B            PC7
-#define BUTTON_C            PC5
+#define BUTTON_A            5 //PA15 //CS
+#define BUTTON_B            6 //PC7
+#define BUTTON_C            9 //PC5
 #define FILE_NAME "data.csv"
 
 
 static Adafruit_LSM6DSOX lsm6ds;
 static Adafruit_LIS3MDL lis3mdl;
 static File dataFile;
-static button_handle_t onlyButton;
+static button_handle_t btnA, btnB, btnC;
 static Adafruit_NeoPixel builtInNeo(1, BUILT_IN_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 static state_machine_t door_state_machine;
+Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 
 static void buttonPress(cck_time_t);
 static void buttonUp(cck_time_t);
@@ -51,6 +60,7 @@ static void print_sensor_data(const sensors_event_t *accel, const sensors_event_
 static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void setup_state_machine();
 static void idle_state_action();
+static void setup_display();
 
 
 static void setup_neopixels()
@@ -65,7 +75,7 @@ static void setup_accel_and_mag()
   bool lsm6ds_success, lis3mdl_success;
 
   lsm6ds_success = lsm6ds.begin_I2C();
-  lis3mdl_success = lis3mdl.begin_I2C(0x1E);
+  lis3mdl_success = lis3mdl.begin_I2C(I2C_LIS3MDL_ADDRESS);
 
   if (!lsm6ds_success){
     Serial.println("Failed to find LSM6DS chip");
@@ -298,17 +308,17 @@ static void buttonPress(cck_time_t startTime)
 
 static void setup_buttons()
 {
-    btn_initButton(&onlyButton, CLEAR_BTN_PIN, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
-    btn_addButton(&onlyButton);
+    btn_initButton(&btnA, BUTTON_A, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
+    btn_addButton(&btnA);
+    btn_initButton(&btnB, BUTTON_B, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
+    btn_addButton(&btnB);
+    btn_initButton(&btnC, BUTTON_C, INPUT_PULLUP, buttonDown, buttonUp, buttonPress);
+    btn_addButton(&btnC);
 }
 
 static void setup_gpio()
 {
-    pinMode(CLEAR_BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(BUTTON_A, INPUT_PULLUP);
-    pinMode(BUTTON_B, INPUT_PULLUP);
-    pinMode(BUTTON_C, INPUT_PULLUP);
     setup_buttons();
 }
 
@@ -388,6 +398,40 @@ static void setup_state_machine() {
     }
 }
 
+static void setup_display()
+{
+  Serial.println("128x64 OLED FeatherWing test");
+  delay(250); // wait for the OLED to power up
+  display.begin(0x3C, true); // Address 0x3C default
+
+  Serial.println("OLED begun");
+
+  // Show image buffer on the display hardware.
+  // Since the buffer is intialized with an Adafruit splashscreen
+  // internally, this will display the splashscreen.
+  display.display();
+  delay(1000);
+
+  // Clear the buffer.
+  display.clearDisplay();
+  display.display();
+
+  display.setRotation(1);
+  Serial.println("Button test");
+
+  pinMode(BUTTON_A, INPUT_PULLUP);
+  pinMode(BUTTON_B, INPUT_PULLUP);
+  pinMode(BUTTON_C, INPUT_PULLUP);
+
+  // text display tests
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0,0);
+  display.print("Connecting to SSID\n'adafruit':");
+  display.print("connected!");
+  display.display(); // actually display all of the above
+}
+
 //==========================================================================
 // Main setup and loop
 //==========================================================================
@@ -398,6 +442,7 @@ void setup()
 
     setup_gpio();
     setup_sdcard();
+    setup_display();
     setup_accel_and_mag();
     setup_neopixels();
     setup_state_machine();
