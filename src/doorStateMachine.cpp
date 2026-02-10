@@ -1,5 +1,73 @@
 #include "doorStateMachine.h"
 
+/*
+TODO: Current plan
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│           Pre-Idle                   │
+│Animation: Faded blink pixel          │
+│ * Shows sliding bar count down till  │
+│  auto state change                   │
+│Events:                               │
+│ * auto-trans: after 5s               │
+│ * btn-prs: next state idle           │
+└──────────────────────────────────────┘
+                    |
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│               Idle                   │
+│Animation: Pixel color warm blue      │
+│  * Pixel color warm blue             │
+│  * Prints Idle on screen or anim     │
+│Events:                               │
+│  * btn-prs: next state pre-newfile   │
+└──────────────────────────────────────┘
+                    |
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│             Pre-NewFile              │
+│Animation:                            │
+│ * Fade blink red warning             │
+│ * Prints a warning that of new file  │
+│ * Shows sliding bar count down till  │
+│  auto state change                   │
+│Events:                               │
+│  * auto-trans: state NewFile after 5s│
+│  * btn-prs: next state record        │
+└──────────────────────────────────────┘
+                    |
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│              NewFile                 │
+│Animation:                            │
+│ * Pixel color red warning            │
+│ * Gives 3s count down until new file │
+│  is created.                         │
+│ * Prints new file name on display    │
+│ * Shows sliding bar count down till  │
+│  auto state change                   │
+│Events:                               │
+│ * auto-trans: state Pre-Record after │
+│ new file creation and then an 5s     │
+│ * btn-prs: next state Pre-Idle       │
+└──────────────────────────────────────┘
+                    |
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│             Pre-Record               │
+│Animation:                            │
+│ * Pixel color light green            │
+│ * Shows sliding bar count down till  │
+│  auto state change                   │
+│Events:                               │
+│ * auto-trans: state Record after 3s  │
+│ * btn-prs: next state Pre-Idle       │
+└──────────────────────────────────────┘
+                    |
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│                Record                │
+│Animation:                            │
+│ * Graph data on display              │
+│ * Max Gs recorded for current run    │
+│Events:                               │
+│ * btn-prs: next state Pre-Idle       │
+└──────────────────────────────────────┘
+*/
 static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
     [PRE_IDLE] = {
         .pre_idle = {
