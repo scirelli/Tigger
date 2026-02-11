@@ -59,9 +59,6 @@ static void shutdown_sdcard();
 static void setup_buttons();
 static void setup_gpio();
 static void setup_neopixels();
-static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
-static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
-static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void setup_state_machine();
 static void idle_state_action();
 static void setup_display();
@@ -323,103 +320,6 @@ static void setup_gpio()
 {
     pinMode(LED_BUILTIN, OUTPUT);
     setup_buttons();
-}
-
-static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
-{
-  // Display the results (acceleration is measured in m/s^2)
-  Serial.print("\t\tAccel X: ");
-  Serial.print(accel->acceleration.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(accel->acceleration.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(accel->acceleration.z, 4);
-  Serial.println(" \tm/s^2 ");
-
-  // Display the results (rotation is measured in rad/s)
-  Serial.print("\t\tGyro  X: ");
-  Serial.print(gyro->gyro.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(gyro->gyro.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(gyro->gyro.z, 4);
-  Serial.println(" \tradians/s ");
-
-  // Display the results (magnetic field is measured in uTesla)
-  Serial.print(" \t\tMag   X: ");
-  Serial.print(mag->magnetic.x, 4);
-  Serial.print(" \tY: ");
-  Serial.print(mag->magnetic.y, 4);
-  Serial.print(" \tZ: ");
-  Serial.print(mag->magnetic.z, 4);
-  Serial.println(" \tuTesla ");
-
-  Serial.print("\t\tTemp   :\t\t\t\t\t");
-  Serial.print(temp->temperature);
-  Serial.println(" \tdeg C");
-  Serial.println();
-}
-
-static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
-{
-    if (dataFile) {
-        // Accel X m/s^2
-        dataFile.print(accel->acceleration.x, 4); dataFile.print(",");
-        // Accel Y m/s^2
-        dataFile.print(accel->acceleration.y, 4); dataFile.print(",");
-        // Accel Z m/s^2
-        dataFile.print(accel->acceleration.z, 4); dataFile.print(",");
-        // Gyro  X rad/s
-        dataFile.print(gyro->gyro.x, 4); dataFile.print(",");
-        // Gyro Y rad/s
-        dataFile.print(gyro->gyro.y, 4); dataFile.print(",");
-        // Gyro Z rad/s
-        dataFile.print(gyro->gyro.z, 4);
-
-        dataFile.flush();
-    } else {
-        Serial.print("error on file handle");
-    }
-}
-
-static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
-{
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.setTextSize(1);
-
-  // Display the results (acceleration is measured in m/s^2)
-  display.print("AX: ");                                     // 3
-  display.print(accel->acceleration.x, DISPLAY_PRECISION);  // 3
-  display.print(" Y: ");                                    // 4
-  display.print(accel->acceleration.y, DISPLAY_PRECISION);  // 3
-  display.print(" Z: ");                                    // 4
-  display.println(accel->acceleration.z, DISPLAY_PRECISION);  // 3
-  //display.println(" m/s^2 ");                               // 7
-
-  // Display the results (rotation is measured in rad/s)
-  display.print("GX: ");
-  display.print(gyro->gyro.x, DISPLAY_PRECISION);
-  display.print(" Y: ");
-  display.print(gyro->gyro.y, DISPLAY_PRECISION);
-  display.print(" Z: ");
-  display.println(gyro->gyro.z, DISPLAY_PRECISION);
-  //display.println(" r/s");
-
-  // Display the results (magnetic field is measured in uTesla)
-  display.print("MX: ");
-  display.print(mag->magnetic.x, DISPLAY_PRECISION);
-  display.print(" Y: ");
-  display.print(mag->magnetic.y, DISPLAY_PRECISION);
-  display.print(" Z: ");
-  display.println(mag->magnetic.z, DISPLAY_PRECISION);
-  //display.println(" uT ");
-
-  display.print("Temp: ");
-  display.print(temp->temperature);
-  display.print(" C");
-
-  display.display();
 }
 
 static void idle_state_action(door_state_t * self, cck_time_t _)

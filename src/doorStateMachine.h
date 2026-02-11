@@ -117,6 +117,9 @@ static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt, c
 static bool is_valid_door_state_id(door_states_id_t);
 static bool is_valid_door_event_id(door_events_t);
 
+static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 
 
 // ==== Pre-Idle ====
