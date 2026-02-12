@@ -30,7 +30,8 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
                     [DOOR_AUTO_TRANSITION] = door_auto_evt_hndler
                 }
-            }
+            },
+            .trans_time = MAX_TRANSITION_TIME
         }
     },
     [IDLE] = {
@@ -154,7 +155,7 @@ static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context
 
 
 //===================================================================
-// Pre Idle State
+// PreIdle State
 //==================================================================
 static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t t)
 {

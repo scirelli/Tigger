@@ -22,6 +22,7 @@ extern "C"
 #endif
 
 #define DISPLAY_PRECISION   1
+#define MAX_TRANSITION_TIME 5000L
 
 typedef struct door_state_t              door_state_t;
 typedef struct door_pre_idle_state_t     door_pre_idle_state_t;
@@ -77,6 +78,7 @@ struct  door_state_t {
 
 struct door_pre_idle_state_t {
     door_state_t ds;
+    cck_time_t trans_time;
 };
 
 struct door_idle_state_t {
