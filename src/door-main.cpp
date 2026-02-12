@@ -44,24 +44,24 @@ static button_handle_t btnA, btnB, btnC;
 static Adafruit_NeoPixel builtInNeo(1, BUILT_IN_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 static Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 
+static void setup_accel_and_mag();
+static void setup_sdcard();
+static void setup_buttons();
+static void setup_gpio();
+static void setup_neopixels();
+static void setup_state_machine();
+static void setup_display();
+
 static void buttonAPress(cck_time_t);
 static void buttonBPress(cck_time_t);
 static void buttonCPress(cck_time_t);
 static void buttonUp(cck_time_t);
 static void buttonDown(cck_time_t);
 static void toggleLED(cck_time_t);
-static void setup_accel_and_mag();
+static void print_file_list();
+static void shutdown_sdcard();
 static void halt(const char reason[]);
 static void halt();
-static void print_file_list();
-static void setup_sdcard();
-static void shutdown_sdcard();
-static void setup_buttons();
-static void setup_gpio();
-static void setup_neopixels();
-static void setup_state_machine();
-static void idle_state_action();
-static void setup_display();
 
 
 static void setup_neopixels()
@@ -259,13 +259,6 @@ static void setup_accel_and_mag()
                           true); // enabled!
 }
 
-static void print_file_list()
-{
-  File root = SD.openRoot();
-  root.ls(LS_R | LS_DATE | LS_SIZE);
-  root.close();
-}
-
 static void setup_sdcard()
 {
     if(!SD.begin(SD_DETECT_NONE)) {
@@ -322,13 +315,6 @@ static void setup_gpio()
     setup_buttons();
 }
 
-static void idle_state_action(door_state_t * self, cck_time_t _)
-{
-    builtInNeo.clear();
-    builtInNeo.setPixelColor(0, Adafruit_NeoPixel::Color(0, 63, 0) );
-    builtInNeo.show();
-}
-
 static void setup_state_machine() {
     door_sm_cfg_t door_sm_config = {
         .lsm6ds     = &lsm6ds,
@@ -339,11 +325,6 @@ static void setup_state_machine() {
     };
     if(!door_init_state_machine(door_sm_config)) {
         Serial.println("Error failed to setup door state machine");
-        return;
-    }
-    //TODO: Pull graphics and such into doorStateMachine.cpp
-    if(!door_set_event_handle(IDLE, DOOR_EVENT_BUTTON_1_PRESS, idle_state_action)) {
-        Serial.println("Error failed to set state event handler DOOR_EVENT_BUTTON_1_PRESS");
         return;
     }
 }
@@ -394,11 +375,29 @@ void setup()
 void loop(void)
 {
     static sensors_event_t accel, gyro, mag, temp;
-    static unsigned long prevTime = 0;
+    static door_sensor_evt_ctx_t sensor_ctx_ptr = {
+      .accel = &accel,
+      .gyro = &gyro,
+      .mag = &mag,
+      .temp = &temp
+    };
+    //static unsigned long prevTime = 0;
 
+
+    lsm6ds.getEvent(&accel, &gyro, &temp);
+    lis3mdl.getEvent(&mag);
+    door_fire_event(
+        DOOR_SENSOR_READING,
+        millis(),
+        &sensor_ctx_ptr
+    );
+    btn_processButtons();
+    door_run_state_machine(curTime);
+
+
+    /*
     unsigned long curTime = millis();
     unsigned long elapTime = curTime - prevTime;
-
     if(elapTime > WRITE_DELAY) {
         prevTime = curTime;
         // Get new normalized sensor events
@@ -408,9 +407,7 @@ void loop(void)
         display_sensor_data(&accel, &gyro, &mag, &temp);
         write_sensor_data(&accel, &gyro, &mag, &temp);
     }
-
-    btn_processButtons();
-    door_run_state_machine(curTime);
+    */
 
     delay(10);
 }
@@ -419,6 +416,13 @@ void loop(void)
 //==========================================================================
 // Utils
 //==========================================================================
+static void print_file_list()
+{
+  File root = SD.openRoot();
+  root.ls(LS_R | LS_DATE | LS_SIZE);
+  root.close();
+}
+
 static void halt(const char reason[])
 {
     Serial.println(reason);

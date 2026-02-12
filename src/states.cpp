@@ -27,11 +27,11 @@ state_proc_status_t state_machine_run(state_machine_t *sm_ptr, cck_time_t t)
     return status;
 }
 
-bool state_fire_event(state_machine_t *sm_ptr, state_event_id_t evt, cck_time_t t)
+bool state_fire_event(state_machine_t *sm_ptr, state_event_id_t evt, cck_time_t t, void* context)
 {
     if(sm_ptr && sm_ptr->cur_state) {
         if(sm_ptr->cur_state->evtHandler) {
-            sm_ptr->cur_state->evtHandler(sm_ptr->cur_state, evt, t);
+            sm_ptr->cur_state->evtHandler(sm_ptr->cur_state, evt, t, context);
         }
         if(sm_ptr->cur_state->next_state) {
             state_transition(sm_ptr, sm_ptr->cur_state->next_state, t);

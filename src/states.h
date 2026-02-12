@@ -63,7 +63,7 @@ typedef state_hndlr_status_t (*stateExitHandler_t)(state_t*, cck_time_t);
  * Sets the state's event handler. This handler will be called when events are fired on the state machine.
  * Use this function to map state_event_id_t to functions.
  */
-typedef void (*stateEventHandler_t)(state_t*, state_event_id_t, cck_time_t);
+typedef void (*stateEventHandler_t)(state_t*, state_event_id_t, cck_time_t, void*);
 
 struct state_t{
     state_id_t state_id;
@@ -96,7 +96,7 @@ state_proc_status_t state_machine_run(state_machine_t *, cck_time_t);
  * state_fire_event
  * Fires and event on the state machine, allowing the current state to process events.
  */
-bool state_fire_event(state_machine_t *, state_event_id_t, cck_time_t);
+bool state_fire_event(state_machine_t *, state_event_id_t, cck_time_t, void* context);
 
 #ifdef __cplusplus
 }
