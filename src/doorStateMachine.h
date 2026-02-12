@@ -109,6 +109,10 @@ typedef struct {
 } door_sensor_evt_ctx_t;
 
 typedef struct {
+   state_t* next_state;
+} door_auto_evt_ctx_t;
+
+typedef struct {
     const Adafruit_LSM6DSOX *lsm6ds;
     const Adafruit_LIS3MDL  *lis3mdl;
     File              *dataFile;
@@ -136,6 +140,7 @@ bool door_set_next_state(door_states_id_t, door_state_t*);
 static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt, cck_time_t t, void*);
 static bool is_valid_door_state_id(door_states_id_t);
 static bool is_valid_door_event_id(door_events_t);
+static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context);
 
 static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
@@ -146,6 +151,8 @@ static void display_sensor_data(const sensors_event_t *accel, const sensors_even
 static state_hndlr_status_t pre_idle_animator(state_t*, cck_time_t);
 static state_hndlr_status_t pre_idle_enter(state_t*, cck_time_t);
 static state_hndlr_status_t pre_idle_exit(state_t*, cck_time_t);
+static void pre_idle_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
+static void pre_idle_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context);
 // ==================
 
 

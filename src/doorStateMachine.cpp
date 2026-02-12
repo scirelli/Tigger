@@ -80,8 +80,11 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     .enter_handler = pre_idle_enter,
                     .exit_handler = pre_idle_exit,
                     .evtHandler = door_state_event_handler,
-                    //.next_state = (state_t*)&door_states[IDLE]
                 },
+                .event_handlers = {
+                    [DOOR_EVENT_BUTTON_1_PRESS] = pre_idle_btn1_prs_hndler,
+                    [DOOR_AUTO_TRANSITION] = door_auto_evt_hndler,
+                }
             }
         }
     },
@@ -95,7 +98,8 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     .next_state = NULL
                 },
                 .event_handlers = {
-                    [DOOR_EVENT_BUTTON_1_PRESS] = idle_btn1_prs_hndler
+                    [DOOR_EVENT_BUTTON_1_PRESS] = idle_btn1_prs_hndler,
+                    [DOOR_AUTO_TRANSITION] = door_auto_evt_hndler,
                 }
             },
         }
@@ -108,7 +112,7 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
 bool door_init_state_machine(door_sm_cfg_t config)
 {
     door_sm.cfg = config;
-    return state_init_machine(&door_sm.sm, &door_states[IDLE].generic);
+    return state_init_machine(&door_sm.sm, &door_states[PRE_IDLE].generic);
 }
 
 bool door_run_state_machine(cck_time_t t)
@@ -119,6 +123,7 @@ bool door_run_state_machine(cck_time_t t)
 
 bool door_fire_event(state_event_id_t evt_id, cck_time_t t, void *context)
 {
+    if(!is_valid_door_event_id((door_events_t)evt_id)) return false;
     return state_fire_event(&door_sm.sm, evt_id, t, context);
 }
 
@@ -193,6 +198,13 @@ static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt_id
         self->event_handlers[evt_id](self, t, context);
     }
 }
+
+static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    if(!context) return;
+    door_auto_evt_ctx_t *evt = (door_auto_evt_ctx_t*)context;
+    self->base_state.next_state = evt->next_state;
+}
 //===================================================================
 
 
@@ -201,15 +213,26 @@ static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt_id
 //==================================================================
 static state_hndlr_status_t pre_idle_animator(state_t *s_ptr, cck_time_t t)
 {
+    //TODO: Blink neopixel for 5s before moving to idle
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_idle_enter(state_t *s_ptr, cck_time_t t)
 {
+    //TODO: init state data.
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_idle_exit(state_t *s_ptr, cck_time_t t)
 {
+    //TODO: Clean up state data.
     return TRANSITION_OK;
+}
+static void pre_idle_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    state_t *bs = &door_get_state(IDLE)->base_state;
+    if(!bs) return;
+    door_fire_event(DOOR_AUTO_TRANSITION, t, &(door_auto_evt_ctx_t){
+        .next_state = bs
+    });
 }
 //===================================================================
 
@@ -221,7 +244,7 @@ static state_hndlr_status_t pre_idle_exit(state_t *s_ptr, cck_time_t t)
 static state_hndlr_status_t idle_animator(state_t *self, cck_time_t _)
 {
     door_sm.cfg.builtInNeo->clear();
-    door_sm.cfg.builtInNeo->setPixelColor(0, Adafruit_NeoPixel::Color(0, 63, 0) );
+    door_sm.cfg.builtInNeo->setPixelColor(0, Adafruit_NeoPixel::Color(0, 31, 0) );
     door_sm.cfg.builtInNeo->show();
     return TRANSITION_OK;
 }
