@@ -5,7 +5,7 @@ bool state_init_machine(state_machine_t *sm_ptr, state_t *s_ptr)
 {
     if(!sm_ptr || !s_ptr) return false;
     sm_ptr->cur_state = s_ptr;
-    if(s_ptr->enter_handler) s_ptr->enter_handler(s_ptr, 0);
+    if(s_ptr->enter_handler) s_ptr->enter_handler(s_ptr, millis());
     return true;
 }
 
