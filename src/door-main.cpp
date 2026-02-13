@@ -361,6 +361,7 @@ static void setup_display()
 void setup()
 {
     Serial.begin(SERIAL_BAUD_RATE);
+    //TODO: Remove, only used for debugging.
     while (!Serial) delay(10);
 
     setup_gpio();
@@ -408,7 +409,7 @@ void loop(void)
     }
     */
 
-    delay(10);
+    delay(1);
 }
 //==========================================================================
 
