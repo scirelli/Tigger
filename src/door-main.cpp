@@ -334,25 +334,27 @@ static void setup_display()
   delay(250); // wait for the OLED to power up
   display.begin(I2C_SH110X_ADDRESS, true);
 
-  Serial.println("OLED begun");
+  Serial.println("OLED begin");
 
   // Show image buffer on the display hardware.
   // Since the buffer is intialized with an Adafruit splashscreen internally, this will display the splashscreen.
   display.display();
-  delay(1000);
+  delay(500);
 
   // Clear the buffer.
   display.clearDisplay();
-  display.display();
 
   display.setRotation(1);
-
   display.setTextSize(2);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(0,0);
-  display.println("Crash Detector");
-  display.setTextSize(1);
+  int16_t x1, y1;
+  uint16_t w, h;
+  const char *str = "TIGGER!";
+  display.getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor(display.width()/2 - w/2,display.height()/2 - h/2);
+  display.println(str);
   display.display(); // actually display all of the above
+  delay(1000);
 }
 
 //==========================================================================
@@ -381,33 +383,16 @@ void loop(void)
       .mag = &mag,
       .temp = &temp
     };
-    cck_time_t curTime = millis();
-    //static unsigned long prevTime = 0;
-
 
     lsm6ds.getEvent(&accel, &gyro, &temp);
     lis3mdl.getEvent(&mag);
     door_fire_event(
         DOOR_SENSOR_READING,
-        curTime,
+        millis(),
         &sensor_ctx_ptr
     );
     btn_processButtons();
-    door_run_state_machine(curTime);
-
-    /*
-    unsigned long curTime = millis();
-    unsigned long elapTime = curTime - prevTime;
-    if(elapTime > WRITE_DELAY) {
-        prevTime = curTime;
-        // Get new normalized sensor events
-        lsm6ds.getEvent(&accel, &gyro, &temp);
-        lis3mdl.getEvent(&mag);
-        log_sensor_data(&accel, &gyro, &mag, &temp);
-        display_sensor_data(&accel, &gyro, &mag, &temp);
-        write_sensor_data(&accel, &gyro, &mag, &temp);
-    }
-    */
+    door_run_state_machine(millis());
 
     delay(1);
 }

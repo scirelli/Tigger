@@ -73,7 +73,8 @@ Additional Useful Long-Form Flags:
 ```
 ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
 │           Pre-Idle                   │
-│Animation: Faded blink pixel          │
+│Animation:                            │
+│ * Faded blink pixel warm blue        │
 │ * Shows sliding bar count down till  │
 │  auto state change                   │
 │Events:                               │
@@ -83,12 +84,12 @@ Additional Useful Long-Form Flags:
                     |
 ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
 │               Idle                   │
-│Animation: Pixel color warm blue      │
-│  * Pixel color warm blue             │
-│  * Prints Idle on screen or anim     │
-│  * Prints max Gs from last run       │
+│Animation:                            │
+│ * Pixel color warm blue              │
+│ * Prints Idle on screen or anim      │
+│ * Prints max Gs from last run        │
 │Events:                               │
-│  * btn-prs: next state pre-newfile   │
+│ * btn-prs: next state pre-newfile    │
 └──────────────────────────────────────┘
                     |
 ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑

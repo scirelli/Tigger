@@ -23,8 +23,10 @@ extern "C"
 #endif
 
 #define DISPLAY_PRECISION   1
-#define MAX_TRANSITION_TIME 5000L
-#define MAX_PRE_IDLE_TIME 15000L
+
+#define MAX_TRANSITION_TIME     5000L
+#define MAX_PRE_IDLE_TIME       (MAX_TRANSITION_TIME)
+#define MAX_PRE_NEW_FILE_TIME   (MAX_PRE_IDLE_TIME)
 
 typedef struct door_state_t              door_state_t;
 typedef struct door_pre_idle_state_t     door_pre_idle_state_t;
@@ -153,15 +155,16 @@ bool door_set_next_state(door_states_id_t, door_state_t*);
 static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt, cck_time_t t, void*);
 static bool is_valid_door_state_id(door_states_id_t);
 static bool is_valid_door_event_id(door_events_t);
-static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context);
-
-static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
-static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
-static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void auto_evt_hndler(door_state_t *self, cck_time_t t, void *context);
+static void fire_auto_transition_to(door_states_id_t s_id, cck_time_t t);
 static void print_door_event_name(door_events_t evt_id);
 static void print_state_name(door_states_id_t state_id);
 static void print_state_name_every_x(state_t*, cck_time_t, cck_time_t x = 1000L);
-static void fire_auto_transition_to(door_state_t *self_ptr, door_states_id_t s_id, cck_time_t t);
+static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
+static void blink_pixel(uint16_t hue, uint8_t sat, cck_time_t elapTime);
+static void print_center(const char* str);
 
 
 // ==== Pre-Idle ====
@@ -169,14 +172,22 @@ static state_hndlr_status_t pre_idle_animator(state_t*, cck_time_t);
 static state_hndlr_status_t pre_idle_enter(state_t*, cck_time_t);
 static state_hndlr_status_t pre_idle_exit(state_t*, cck_time_t);
 static void pre_idle_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
-static void pre_idle_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context);
 // ==================
 
 
 // ==== Idle ====
 static state_hndlr_status_t idle_animator(state_t*, cck_time_t);
+static state_hndlr_status_t idle_enter(state_t*, cck_time_t);
+static state_hndlr_status_t idle_exit(state_t*, cck_time_t);
 static void idle_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
 // ==================
+
+// ==== PreNew File ====
+static state_hndlr_status_t pre_new_file_animator(state_t*, cck_time_t);
+static state_hndlr_status_t pre_new_file_enter(state_t*, cck_time_t);
+static state_hndlr_status_t pre_new_file_exit(state_t*, cck_time_t);
+static void pre_new_file_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
+// =====================
 
 
 #ifdef __cplusplus

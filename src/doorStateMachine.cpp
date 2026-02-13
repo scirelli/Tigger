@@ -28,7 +28,7 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     [DOOR_EVENT_BUTTON_1_PRESS] = pre_idle_btn1_prs_hndler,
                     [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
                     [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
-                    [DOOR_AUTO_TRANSITION] = door_auto_evt_hndler
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler
                 }
             }
         }
@@ -39,12 +39,34 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                 .base_state = {
                     .state_id = IDLE,
                     .animator_fnc = idle_animator,
+                    .enter_handler = idle_enter,
+                    .exit_handler = idle_exit,
                     .evtHandler = door_state_event_handler
                 },
                 .event_handlers = {
                     [DOOR_EVENT_BUTTON_1_PRESS] = idle_btn1_prs_hndler,
                     [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
-                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL
+                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler
+                }
+            },
+        }
+    },
+    [PRE_NEW_FILE] = {
+        .pre_new_file = {
+            .ds = {
+                .base_state = {
+                    .state_id = PRE_NEW_FILE,
+                    .animator_fnc = pre_new_file_animator,
+                    .enter_handler = pre_new_file_enter,
+                    .exit_handler = pre_new_file_exit,
+                    .evtHandler = door_state_event_handler
+                },
+                .event_handlers = {
+                    [DOOR_EVENT_BUTTON_1_PRESS] = pre_new_file_btn1_prs_hndler,
+                    [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
+                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler
                 }
             },
         }
@@ -53,7 +75,7 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
 
 //===================================================================
 // Door SM State functions
-//==================================================================
+//===================================================================
 bool door_init_state_machine(door_sm_cfg_t config)
 {
     door_sm.cfg = config;
@@ -122,7 +144,7 @@ bool door_set_next_state(door_states_id_t id, door_state_t* s_ptr)
 
 //===================================================================
 // Door SM state help functions
-//==================================================================
+//===================================================================
 static bool is_valid_door_state_id(door_states_id_t state_id)
 {
     return (state_id >= 0 && state_id < _DOOR_STATE_COUNT);
@@ -144,7 +166,7 @@ static void door_state_event_handler(state_t* state_ptr, state_event_id_t evt_id
     }
 }
 
-static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context)
+static void auto_evt_hndler(door_state_t *self, cck_time_t t, void *context)
 {
     if(!context) return;
     door_auto_evt_ctx_t *evt = (door_auto_evt_ctx_t*)context;
@@ -155,7 +177,7 @@ static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context
 
 //===================================================================
 // PreIdle State
-//==================================================================
+//===================================================================
 static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t curTime)
 {
     cck_time_t elapTime = curTime - self_ptr->enter_time;
@@ -163,17 +185,25 @@ static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t curT
     print_state_name_every_x(self_ptr, curTime);
 
     if(elapTime > MAX_PRE_IDLE_TIME) {
-        fire_auto_transition_to((door_state_t*)self_ptr, IDLE, curTime);
+        fire_auto_transition_to(IDLE, curTime);
         return TRANSITION_NEXT;
     }
 
-    door_sm.cfg.builtInNeo->setPixelColor(
-        0,
-        door_sm.cfg.builtInNeo->gamma32(
-            door_sm.cfg.builtInNeo->ColorHSV(43690, 255, Adafruit_NeoPixel::sine8((uint8_t)(elapTime>>2))>>2)
-        )
-    );
-    door_sm.cfg.builtInNeo->show();
+    blink_pixel(43690, 255, elapTime);
+
+    door_sm.cfg.display->clearDisplay();
+    if(elapTime > 0 && elapTime < 1000) {
+        print_center("T");
+    } else if(elapTime >= 1000 && elapTime < 2000) {
+        print_center("I");
+    } else if(elapTime >= 2000 && elapTime < 2500) {
+        print_center("GA   ");
+    } else if(elapTime >= 2500 && elapTime < 3000) {
+        print_center("GA GA");
+    } else if(elapTime >= 3000 && elapTime < 5000) {
+        print_center("EERRR!!");
+    }
+    door_sm.cfg.display->display();
 
     return TRANSITION_OK;
 }
@@ -190,16 +220,7 @@ static state_hndlr_status_t pre_idle_exit(state_t *self_ptr, cck_time_t t)
 }
 static void pre_idle_btn1_prs_hndler(door_state_t *self_ptr, cck_time_t t, void *context)
 {
-    fire_auto_transition_to(self_ptr, IDLE, t);
-}
-static void fire_auto_transition_to(door_state_t *self_ptr, door_states_id_t s_id, cck_time_t t)
-{
-    door_state_t *ds = door_get_state(s_id);
-    if(!ds) return;
-    door_auto_evt_ctx_t d_evt = {
-        .next_state = &ds->base_state
-    };
-    door_fire_event(DOOR_AUTO_TRANSITION, t, &d_evt);
+    fire_auto_transition_to(IDLE, t);
 }
 //===================================================================
 
@@ -207,26 +228,101 @@ static void fire_auto_transition_to(door_state_t *self_ptr, door_states_id_t s_i
 
 //===================================================================
 // Idle State
-//==================================================================
+//===================================================================
 static state_hndlr_status_t idle_animator(state_t *self_ptr, cck_time_t t)
 {
-    door_sm.cfg.builtInNeo->clear();
-    door_sm.cfg.builtInNeo->setPixelColor(0, Adafruit_NeoPixel::Color(0, 31, 0) );
-    door_sm.cfg.builtInNeo->show();
     print_state_name_every_x(self_ptr, t);
     return TRANSITION_OK;
 }
-
-static void idle_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context)
+static state_hndlr_status_t idle_enter(state_t *self_ptr, cck_time_t t)
 {
+    self_ptr->enter_time = t;
+    door_sm.cfg.builtInNeo->clear();
+    door_sm.cfg.builtInNeo->setPixelColor(0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(43690, 255, 128)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextColor(SH110X_WHITE);
+    door_sm.cfg.display->setCursor(0,0);
+    door_record_state_t *ds_ptr = (door_record_state_t*)door_get_state(RECORD);
+    if(ds_ptr) {
+        door_sm.cfg.display->setTextSize(2);
+        door_sm.cfg.display->print(ds_ptr->max_gs, 2);
+        door_sm.cfg.display->setTextSize(1);
+        door_sm.cfg.display->println(" m/s^s");
+    }
+    door_sm.cfg.display->display();
+
+    return TRANSITION_OK;
 }
+static state_hndlr_status_t idle_exit(state_t *self_ptr, cck_time_t t)
+{
+    return TRANSITION_OK;
+}
+static void idle_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    fire_auto_transition_to(PRE_NEW_FILE, t);
+}
+//===================================================================
+
+
+
+//===================================================================
+// Pre-New File State
+//===================================================================
+static state_hndlr_status_t pre_new_file_animator(state_t *self_ptr, cck_time_t curTime)
+{
+    cck_time_t elapTime = curTime - self_ptr->enter_time;
+    print_state_name_every_x(self_ptr, curTime);
+
+    if(elapTime > MAX_PRE_NEW_FILE_TIME) {
+        fire_auto_transition_to(NEW_FILE, curTime);
+        return TRANSITION_NEXT;
+    }
+    blink_pixel(0, 255, elapTime);
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t pre_new_file_enter(state_t *self_ptr, cck_time_t t)
+{
+    self_ptr->enter_time = t;
+
+    door_sm.cfg.builtInNeo->clear();
+    door_sm.cfg.builtInNeo->setPixelColor(0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(10, 255, 128)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextColor(SH110X_WHITE);
+    door_sm.cfg.display->setCursor(0,0);
+    door_sm.cfg.display->setTextSize(2);
+    door_sm.cfg.display->println("Create New file?");
+    door_sm.cfg.display->display();
+
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t pre_new_file_exit(state_t *self_ptr, cck_time_t t)
+{
+    return TRANSITION_OK;
+}
+static void pre_new_file_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    fire_auto_transition_to(PRE_RECORD, t); //Skip creating a new file
+}
+
 //===================================================================
 
 
 
 //===================================================================
 // Utils
-//==================================================================
+//===================================================================
 static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
 {
   // Display the results (acceleration is measured in m/s^2)
@@ -351,5 +447,32 @@ static void print_state_name_every_x(state_t *s_ptr, cck_time_t t, cck_time_t x)
         Serial.print(doorStateNames[s_ptr->state_id]);
         Serial.println(" state");
     }
+}
+static void fire_auto_transition_to(door_states_id_t s_id, cck_time_t t)
+{
+    door_state_t *ds = door_get_state(s_id);
+    if(!ds) return;
+    door_auto_evt_ctx_t d_evt = {
+        .next_state = &ds->base_state
+    };
+    door_fire_event(DOOR_AUTO_TRANSITION, t, &d_evt);
+}
+static void blink_pixel(uint16_t hue, uint8_t sat, cck_time_t elapTime)
+{
+    door_sm.cfg.builtInNeo->setPixelColor(
+        0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(hue, sat, Adafruit_NeoPixel::sine8((uint8_t)(elapTime>>2))>>2)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+}
+static void print_center(const char *str)
+{
+    int16_t x1, y1;
+    uint16_t w, h;
+    door_sm.cfg.display->getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+    door_sm.cfg.display->setCursor(door_sm.cfg.display->width()/2 - w/2,door_sm.cfg.display->height()/2 - h/2);
+    door_sm.cfg.display->println(str);
 }
 //===================================================================
