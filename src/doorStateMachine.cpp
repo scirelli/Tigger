@@ -30,8 +30,7 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
                     [DOOR_AUTO_TRANSITION] = door_auto_evt_hndler
                 }
-            },
-            .trans_time = MAX_TRANSITION_TIME
+            }
         }
     },
     [IDLE] = {
@@ -116,7 +115,7 @@ door_state_t* door_get_state(door_states_id_t id)
 bool door_set_next_state(door_states_id_t id, door_state_t* s_ptr)
 {
     if(!is_valid_door_state_id(id)) return false;
-    door_states[id].generic.next_state = (state_t*)s_ptr;;
+    door_states[id].generic.next_state = (state_t*)s_ptr;
     return true;
 }
 //===================================================================
@@ -157,25 +156,45 @@ static void door_auto_evt_hndler(door_state_t *self, cck_time_t t, void *context
 //===================================================================
 // PreIdle State
 //==================================================================
-static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t t)
+static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t curTime)
 {
-    //TODO: Blink neopixel for 5s before moving to idle
-    print_state_name_every_x(self_ptr, t);
+    cck_time_t elapTime = curTime - self_ptr->enter_time;
+
+    print_state_name_every_x(self_ptr, curTime);
+
+    if(elapTime > MAX_PRE_IDLE_TIME) {
+        fire_auto_transition_to((door_state_t*)self_ptr, IDLE, curTime);
+        return TRANSITION_NEXT;
+    }
+
+    door_sm.cfg.builtInNeo->setPixelColor(
+        0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(43690, 255, Adafruit_NeoPixel::sine8((uint8_t)(elapTime>>2))>>2)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_idle_enter(state_t *self_ptr, cck_time_t t)
 {
-    //TODO: init state data.
+    self_ptr->enter_time = t;
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_idle_exit(state_t *self_ptr, cck_time_t t)
 {
-    //TODO: Clean up state data.
+    door_sm.cfg.builtInNeo->setPixelColor(0, door_sm.cfg.builtInNeo->Color(0,0,0));
+    door_sm.cfg.builtInNeo->show();
     return TRANSITION_OK;
 }
 static void pre_idle_btn1_prs_hndler(door_state_t *self_ptr, cck_time_t t, void *context)
 {
-    door_state_t *ds = door_get_state(IDLE);
+    fire_auto_transition_to(self_ptr, IDLE, t);
+}
+static void fire_auto_transition_to(door_state_t *self_ptr, door_states_id_t s_id, cck_time_t t)
+{
+    door_state_t *ds = door_get_state(s_id);
     if(!ds) return;
     door_auto_evt_ctx_t d_evt = {
         .next_state = &ds->base_state

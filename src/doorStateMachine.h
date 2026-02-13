@@ -2,6 +2,7 @@
 #define _DOORSTATEMACHINE_H
 #include <stdbool.h>
 #include <stddef.h>
+#include <math.h>
 #include <Arduino.h>
 #include <STM32SD.h>
 #include <Adafruit_LSM6DSOX.h>
@@ -23,6 +24,7 @@ extern "C"
 
 #define DISPLAY_PRECISION   1
 #define MAX_TRANSITION_TIME 5000L
+#define MAX_PRE_IDLE_TIME 15000L
 
 typedef struct door_state_t              door_state_t;
 typedef struct door_pre_idle_state_t     door_pre_idle_state_t;
@@ -71,14 +73,13 @@ typedef enum: state_event_id_t  {
 #undef X
 } door_events_t;
 
-struct  door_state_t {
+struct door_state_t {
     state_t base_state;
     door_event_handler_t event_handlers[_DOOR_EVENT_COUNT];
 };
 
 struct door_pre_idle_state_t {
     door_state_t ds;
-    cck_time_t trans_time;
 };
 
 struct door_idle_state_t {
@@ -160,6 +161,7 @@ static void display_sensor_data(const sensors_event_t *accel, const sensors_even
 static void print_door_event_name(door_events_t evt_id);
 static void print_state_name(door_states_id_t state_id);
 static void print_state_name_every_x(state_t*, cck_time_t, cck_time_t x = 1000L);
+static void fire_auto_transition_to(door_state_t *self_ptr, door_states_id_t s_id, cck_time_t t);
 
 
 // ==== Pre-Idle ====
