@@ -2,6 +2,7 @@
 #define _DOORSTATEMACHINE_H
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <math.h>
 #include <Arduino.h>
 #include <STM32SD.h>
@@ -22,11 +23,17 @@ extern "C"
 {
 #endif
 
+#define COLOR565(r, g, b) \
+    ((uint16_t)(((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+
 #define DISPLAY_PRECISION   1
 
-#define MAX_TRANSITION_TIME     5000L
-#define MAX_PRE_IDLE_TIME       (MAX_TRANSITION_TIME)
-#define MAX_PRE_NEW_FILE_TIME   (MAX_PRE_IDLE_TIME)
+#define MAX_TRANSITION_TIME     10000L
+#define MAX_PRE_IDLE_TIME       10000L
+#define MAX_PRE_NEW_FILE_TIME   10000L
+#define MAX_PRE_RECORD_TIME     10000L
+#define NEW_FILE_MSG_DELAY      5000L
+#define FILE_NAME "data_%lu.csv"
 
 typedef struct door_state_t              door_state_t;
 typedef struct door_pre_idle_state_t     door_pre_idle_state_t;
@@ -94,6 +101,7 @@ struct door_pre_new_file_state_t {
 
 struct door_new_file_state_t  {
     door_state_t ds;
+    bool fileCreated;
 };
 
 struct door_pre_record_state_t  {
@@ -160,12 +168,18 @@ static void fire_auto_transition_to(door_states_id_t s_id, cck_time_t t);
 static void print_door_event_name(door_events_t evt_id);
 static void print_state_name(door_states_id_t state_id);
 static void print_state_name_every_x(state_t*, cck_time_t, cck_time_t x = 1000L);
+static void display_default_settings();
 static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void display_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp);
 static void blink_pixel(uint16_t hue, uint8_t sat, cck_time_t elapTime);
-static void print_center(const char* str);
-
+static void display_error(const char* errorMsg);
+static void display_center(const char* str);
+static void display_bot_center(const char *str);
+static void display_top_center(const char *str);
+static void time_bar(float);
+static void halt();
+static void halt_with_reason(const char[]);
 
 // ==== Pre-Idle ====
 static state_hndlr_status_t pre_idle_animator(state_t*, cck_time_t);
@@ -189,6 +203,27 @@ static state_hndlr_status_t pre_new_file_exit(state_t*, cck_time_t);
 static void pre_new_file_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
 // =====================
 
+// ==== New File ====
+static state_hndlr_status_t new_file_animator(state_t*, cck_time_t);
+static state_hndlr_status_t new_file_enter(state_t*, cck_time_t);
+static state_hndlr_status_t new_file_exit(state_t*, cck_time_t);
+static void new_file_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
+// =====================
+
+// ==== Pre-Record ====
+static state_hndlr_status_t pre_record_animator(state_t*, cck_time_t);
+static state_hndlr_status_t pre_record_enter(state_t*, cck_time_t);
+static state_hndlr_status_t pre_record_exit(state_t*, cck_time_t);
+static void pre_record_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
+// =====================
+
+// ==== Record ====
+static state_hndlr_status_t record_animator(state_t*, cck_time_t);
+static state_hndlr_status_t record_enter(state_t*, cck_time_t);
+static state_hndlr_status_t record_exit(state_t*, cck_time_t);
+static void record_btn1_prs_hndler(door_state_t *self, cck_time_t _, void *context);
+static void record_sensor_evt_hndler(door_state_t *self, cck_time_t _, void *context);
+// ================
 
 #ifdef __cplusplus
 }

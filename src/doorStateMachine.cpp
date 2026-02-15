@@ -1,6 +1,7 @@
 #include "doorStateMachine.h"
 
 static door_sm_t door_sm;
+static File dataFile;
 static const char* doorStateNames[] = {
 #define X(name) #name,
     DOOR_STATES
@@ -69,6 +70,66 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
                     [DOOR_AUTO_TRANSITION] = auto_evt_hndler
                 }
             },
+        }
+    },
+    [NEW_FILE] = {
+        .new_file = {
+            .ds = {
+                .base_state = {
+                    .state_id = NEW_FILE,
+                    .animator_fnc = new_file_animator,
+                    .enter_handler = new_file_enter,
+                    .exit_handler = new_file_exit,
+                    .evtHandler = door_state_event_handler
+                },
+                .event_handlers = {
+                    [DOOR_EVENT_BUTTON_1_PRESS] = new_file_btn1_prs_hndler,
+                    [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
+                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler
+                }
+            },
+            .fileCreated = false
+        }
+    },
+    [PRE_RECORD] = {
+        .pre_record = {
+            .ds = {
+                .base_state = {
+                    .state_id = PRE_RECORD,
+                    .animator_fnc = pre_record_animator,
+                    .enter_handler = pre_record_enter,
+                    .exit_handler = pre_record_exit,
+                    .evtHandler = door_state_event_handler
+                },
+                .event_handlers = {
+                    [DOOR_EVENT_BUTTON_1_PRESS] = pre_record_btn1_prs_hndler,
+                    [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
+                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler
+                }
+            },
+        }
+    },
+    [RECORD] = {
+        .record = {
+            .ds = {
+                .base_state = {
+                    .state_id = RECORD,
+                    .animator_fnc = record_animator,
+                    .enter_handler = record_enter,
+                    .exit_handler = record_exit,
+                    .evtHandler = door_state_event_handler
+                },
+                .event_handlers = {
+                    [DOOR_EVENT_BUTTON_1_PRESS] = record_btn1_prs_hndler,
+                    [DOOR_EVENT_BUTTON_2_PRESS] = NULL,
+                    [DOOR_EVENT_BUTTON_3_PRESS] = NULL,
+                    [DOOR_AUTO_TRANSITION] = auto_evt_hndler,
+                    [DOOR_SENSOR_READING] = record_sensor_evt_hndler
+                }
+            },
+            .max_gs = 0.0f
         }
     }
 };
@@ -175,6 +236,7 @@ static void auto_evt_hndler(door_state_t *self, cck_time_t t, void *context)
 //===================================================================
 
 
+
 //===================================================================
 // PreIdle State
 //===================================================================
@@ -192,23 +254,32 @@ static state_hndlr_status_t pre_idle_animator(state_t *self_ptr, cck_time_t curT
     blink_pixel(43690, 255, elapTime);
 
     door_sm.cfg.display->clearDisplay();
-    if(elapTime > 0 && elapTime < 1000) {
-        print_center("T");
-    } else if(elapTime >= 1000 && elapTime < 2000) {
-        print_center("I");
-    } else if(elapTime >= 2000 && elapTime < 2500) {
-        print_center("GA   ");
-    } else if(elapTime >= 2500 && elapTime < 3000) {
-        print_center("GA GA");
-    } else if(elapTime >= 3000 && elapTime < 5000) {
-        print_center("EERRR!!");
+    door_sm.cfg.display->setTextSize(2);
+    //TODO: Convert this to something like frames of animation
+    if(elapTime > 0 && elapTime < 500) {
+        display_center("T");
+    } else if(elapTime >= 500 && elapTime < 1000) {
+        display_center("I");
+    } else if(elapTime >= 1000 && elapTime < 1500) {
+        display_center("GA   ");
+    } else if(elapTime >= 1500 && elapTime < 2000) {
+        display_center("GA GA");
+    } else if(elapTime >= 2000 && elapTime < 3000) {
+        display_center("EERRR!!");
+    } else if(elapTime >= 3000 && elapTime < MAX_PRE_IDLE_TIME) {
+        display_center("TIGGER!!");
     }
-    door_sm.cfg.display->display();
+    door_sm.cfg.display->setTextSize(1);
+    display_bot_center("Pre-Idle");
 
+    time_bar((float)elapTime/MAX_PRE_IDLE_TIME);
+
+    door_sm.cfg.display->display();
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_idle_enter(state_t *self_ptr, cck_time_t t)
 {
+    display_default_settings();
     self_ptr->enter_time = t;
     return TRANSITION_OK;
 }
@@ -245,15 +316,36 @@ static state_hndlr_status_t idle_enter(state_t *self_ptr, cck_time_t t)
     );
     door_sm.cfg.builtInNeo->show();
 
-    door_sm.cfg.display->clearDisplay();
-    door_sm.cfg.display->setTextColor(SH110X_WHITE);
-    door_sm.cfg.display->setCursor(0,0);
+    display_default_settings();
+    display_top_center("Last run max Gs");
     door_record_state_t *ds_ptr = (door_record_state_t*)door_get_state(RECORD);
     if(ds_ptr) {
+        const char *str1 = "16.00";
+        const char* str2 = " m/s^2";
+        int16_t x1, y1, x2, y2;
+        uint16_t w1, h1, w2, h2;
+
+
         door_sm.cfg.display->setTextSize(2);
-        door_sm.cfg.display->print(ds_ptr->max_gs, 2);
+        door_sm.cfg.display->getTextBounds(str1, 0, 0, &x1, &y1, &w1, &h1);
         door_sm.cfg.display->setTextSize(1);
-        door_sm.cfg.display->println(" m/s^s");
+        door_sm.cfg.display->getTextBounds(str2, 0, 0, &x2, &y2, &w2, &h2);
+
+        door_sm.cfg.display->setCursor(
+                door_sm.cfg.display->width()/2 - (w1/2 + w2/2),
+                door_sm.cfg.display->height()/2 - h1/2
+        );
+        door_sm.cfg.display->setTextSize(2);
+        door_sm.cfg.display->print(ds_ptr->max_gs);
+
+        door_sm.cfg.display->setCursor(
+                (door_sm.cfg.display->width()/2 - (w1/2 + w2/2)) + w1/2 + w2*.7f,
+                door_sm.cfg.display->height()/2 - h1/2 + h2
+        );
+        door_sm.cfg.display->setTextSize(1);
+        door_sm.cfg.display->print(str2);
+
+        display_bot_center("Idle");
     }
     door_sm.cfg.display->display();
 
@@ -283,41 +375,219 @@ static state_hndlr_status_t pre_new_file_animator(state_t *self_ptr, cck_time_t 
         fire_auto_transition_to(NEW_FILE, curTime);
         return TRANSITION_NEXT;
     }
+
     blink_pixel(0, 255, elapTime);
+
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextSize(2);
+    display_center("Create a  new file?");
+    door_sm.cfg.display->setTextSize(1);
+    display_bot_center("Press btn to cancel");
+    time_bar((float)elapTime/MAX_PRE_NEW_FILE_TIME);
+    door_sm.cfg.display->display();
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_new_file_enter(state_t *self_ptr, cck_time_t t)
 {
     self_ptr->enter_time = t;
-
     door_sm.cfg.builtInNeo->clear();
     door_sm.cfg.builtInNeo->setPixelColor(0,
         door_sm.cfg.builtInNeo->gamma32(
-            door_sm.cfg.builtInNeo->ColorHSV(10, 255, 128)
+            door_sm.cfg.builtInNeo->ColorHSV(0, 255, 128)
         )
     );
     door_sm.cfg.builtInNeo->show();
 
-    door_sm.cfg.display->clearDisplay();
-    door_sm.cfg.display->setTextColor(SH110X_WHITE);
-    door_sm.cfg.display->setCursor(0,0);
-    door_sm.cfg.display->setTextSize(2);
-    door_sm.cfg.display->println("Create New file?");
-    door_sm.cfg.display->display();
-
+    display_default_settings();
     return TRANSITION_OK;
 }
 static state_hndlr_status_t pre_new_file_exit(state_t *self_ptr, cck_time_t t)
 {
+    Serial.println("Pre-New File Exit");
     return TRANSITION_OK;
 }
 static void pre_new_file_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
 {
-    fire_auto_transition_to(PRE_RECORD, t); //Skip creating a new file
+    fire_auto_transition_to(IDLE, t);
 }
-
 //===================================================================
 
+
+
+//===================================================================
+// New File State
+//===================================================================
+static state_hndlr_status_t new_file_animator(state_t *self_ptr, cck_time_t curTime)
+{
+    cck_time_t elapTime = curTime - self_ptr->enter_time;
+    print_state_name_every_x(self_ptr, curTime);
+
+    blink_pixel(0, 255, elapTime);
+    if(((door_new_file_state_t*)self_ptr)->fileCreated) {
+        if(elapTime > NEW_FILE_MSG_DELAY) {
+            fire_auto_transition_to(PRE_RECORD, curTime);
+        }
+    }
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t new_file_enter(state_t *self_ptr, cck_time_t t)
+{
+    self_ptr->enter_time = t;
+    door_new_file_state_t *ds_ptr = (door_new_file_state_t*)self_ptr;
+    ds_ptr->fileCreated = false;
+
+    door_sm.cfg.builtInNeo->clear();
+    door_sm.cfg.builtInNeo->setPixelColor(0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(0, 255, 128)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+
+    display_default_settings();
+    door_sm.cfg.display->setTextSize(2);
+    display_center("Creating a new file");
+    door_sm.cfg.display->display();
+
+    char filename[20];
+    snprintf(filename, sizeof(filename), FILE_NAME, t);
+    dataFile = SD.open(filename, FILE_WRITE);
+    if (dataFile) {
+        dataFile.seek(dataFile.size()); //Move to the end of the file for appending.
+        ds_ptr->fileCreated = true;
+    } else {
+        Serial.print("Error opening file ");
+        Serial.println(filename);
+        halt();
+    }
+    door_sm.cfg.display->clearDisplay();
+    display_center("New file  created");
+    door_sm.cfg.display->setTextSize(1);
+    display_top_center(filename);
+    display_bot_center("New file");
+    door_sm.cfg.display->display();
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t new_file_exit(state_t *self_ptr, cck_time_t t)
+{
+    Serial.println("New File Exit");
+    return TRANSITION_OK;
+}
+static void new_file_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    fire_auto_transition_to(PRE_RECORD, t);
+}
+//===================================================================
+
+
+
+//===================================================================
+// Pre-Record State
+//===================================================================
+static state_hndlr_status_t pre_record_animator(state_t *self_ptr, cck_time_t curTime)
+{
+    cck_time_t elapTime = curTime - self_ptr->enter_time;
+    print_state_name_every_x(self_ptr, curTime);
+
+    if(elapTime > MAX_PRE_RECORD_TIME) {
+        fire_auto_transition_to(RECORD, curTime);
+        return TRANSITION_NEXT;
+    }
+
+    blink_pixel(21845, 255, elapTime);
+
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextSize(1);
+    display_bot_center("Press btn to start");
+    door_sm.cfg.display->setTextSize(2);
+    display_top_center("Get ready to record!");
+    time_bar((float)elapTime/MAX_PRE_RECORD_TIME);
+    door_sm.cfg.display->display();
+
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t pre_record_enter(state_t *self_ptr, cck_time_t t)
+{
+    self_ptr->enter_time = t;
+    door_sm.cfg.builtInNeo->clear();
+    door_sm.cfg.builtInNeo->setPixelColor(0,
+        door_sm.cfg.builtInNeo->gamma32(
+            door_sm.cfg.builtInNeo->ColorHSV(21845, 255, 128)
+        )
+    );
+    door_sm.cfg.builtInNeo->show();
+    display_default_settings();
+
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t pre_record_exit(state_t *self_ptr, cck_time_t t)
+{
+    Serial.println("Pre-Record Exit");
+    return TRANSITION_OK;
+}
+static void pre_record_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    fire_auto_transition_to(RECORD, t);
+}
+//===================================================================
+
+
+
+//===================================================================
+// Record State
+//===================================================================
+static state_hndlr_status_t record_animator(state_t *self_ptr, cck_time_t curTime)
+{
+    cck_time_t elapTime = curTime - self_ptr->enter_time;
+    print_state_name_every_x(self_ptr, curTime);
+    blink_pixel(21845, 255, elapTime);
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t record_enter(state_t *self_ptr, cck_time_t t)
+{
+    self_ptr->enter_time = t;
+    door_record_state_t *ds_ptr = (door_record_state_t*)self_ptr;
+    ds_ptr->max_gs = 0.0f;
+
+    display_default_settings();
+    display_bot_center("Press btn to stop");
+    door_sm.cfg.display->setTextSize(2);
+    display_center("Recording...");
+    door_sm.cfg.display->display();
+
+    return TRANSITION_OK;
+}
+static state_hndlr_status_t record_exit(state_t *self_ptr, cck_time_t t)
+{
+    if(dataFile) {
+        dataFile.close();
+    }
+    return TRANSITION_OK;
+}
+static void record_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    fire_auto_transition_to(IDLE, t);
+}
+static void record_sensor_evt_hndler(door_state_t *self, cck_time_t t, void *context)
+{
+    if(!context) return;
+    door_sensor_evt_ctx_t *evt = (door_sensor_evt_ctx_t*)context;
+    door_record_state_t *ds_ptr = (door_record_state_t*)self;
+
+    float accel_mag = sqrtf(
+        evt->accel->acceleration.x * evt->accel->acceleration.x +
+        evt->accel->acceleration.y * evt->accel->acceleration.y +
+        evt->accel->acceleration.z * evt->accel->acceleration.z
+    );
+    float gs = accel_mag / 9.81f;
+    if(gs > ds_ptr->max_gs) {
+        ds_ptr->max_gs = gs;
+    }
+
+    write_sensor_data(evt->accel, evt->gyro, evt->mag, evt->temp);
+    display_sensor_data(evt->accel, evt->gyro, evt->mag, evt->temp);
+}
+//===================================================================
 
 
 //===================================================================
@@ -360,21 +630,21 @@ static void log_sensor_data(const sensors_event_t *accel, const sensors_event_t 
 
 static void write_sensor_data(const sensors_event_t *accel, const sensors_event_t *gyro, const sensors_event_t *mag, const sensors_event_t *temp)
 {
-    if (door_sm.cfg.dataFile) {
+    if (dataFile) {
         // Accel X m/s^2
-        door_sm.cfg.dataFile->print(accel->acceleration.x, 4); door_sm.cfg.dataFile->print(",");
+        dataFile.print(accel->acceleration.x, 4); dataFile.print(",");
         // Accel Y m/s^2
-        door_sm.cfg.dataFile->print(accel->acceleration.y, 4); door_sm.cfg.dataFile->print(",");
+        dataFile.print(accel->acceleration.y, 4); dataFile.print(",");
         // Accel Z m/s^2
-        door_sm.cfg.dataFile->print(accel->acceleration.z, 4); door_sm.cfg.dataFile->print(",");
+        dataFile.print(accel->acceleration.z, 4); dataFile.print(",");
         // Gyro  X rad/s
-        door_sm.cfg.dataFile->print(gyro->gyro.x, 4); door_sm.cfg.dataFile->print(",");
+        dataFile.print(gyro->gyro.x, 4); dataFile.print(",");
         // Gyro Y rad/s
-        door_sm.cfg.dataFile->print(gyro->gyro.y, 4); door_sm.cfg.dataFile->print(",");
+        dataFile.print(gyro->gyro.y, 4); dataFile.print(",");
         // Gyro Z rad/s
-        door_sm.cfg.dataFile->print(gyro->gyro.z, 4);
+        dataFile.println(gyro->gyro.z, 4);
 
-        door_sm.cfg.dataFile->flush();
+        dataFile.flush();
     } else {
         Serial.print("error on file handle");
     }
@@ -467,12 +737,61 @@ static void blink_pixel(uint16_t hue, uint8_t sat, cck_time_t elapTime)
     );
     door_sm.cfg.builtInNeo->show();
 }
-static void print_center(const char *str)
+static void display_error(const char* errorMsg)
+{
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextSize(2);
+    door_sm.cfg.display->setTextColor(COLOR565(255,0,0));
+    display_center(errorMsg);
+    door_sm.cfg.display->display();
+}
+static void display_center(const char *str)
 {
     int16_t x1, y1;
     uint16_t w, h;
     door_sm.cfg.display->getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
     door_sm.cfg.display->setCursor(door_sm.cfg.display->width()/2 - w/2,door_sm.cfg.display->height()/2 - h/2);
-    door_sm.cfg.display->println(str);
+    door_sm.cfg.display->print(str);
+}
+static void display_bot_center(const char *str)
+{
+    int16_t x1, y1;
+    uint16_t w, h;
+    door_sm.cfg.display->getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+    door_sm.cfg.display->setCursor(door_sm.cfg.display->width()/2 - w/2, door_sm.cfg.display->height()-h);
+    door_sm.cfg.display->print(str);
+}
+static void display_top_center(const char *str)
+{
+    int16_t x1, y1;
+    uint16_t w, h;
+    door_sm.cfg.display->getTextBounds(str, 0, 0, &x1, &y1, &w, &h);
+    door_sm.cfg.display->setCursor(door_sm.cfg.display->width()/2 - w/2, 0);
+    door_sm.cfg.display->print(str);
+}
+static void display_default_settings()
+{
+    door_sm.cfg.display->clearDisplay();
+    door_sm.cfg.display->setTextColor(SH110X_WHITE);
+    door_sm.cfg.display->setTextSize(1);
+    door_sm.cfg.display->setCursor(0,0);
+}
+static void time_bar(float scale_factor)
+{
+    door_sm.cfg.display->drawLine(
+        door_sm.cfg.display->width()-1, door_sm.cfg.display->height()-1,
+        door_sm.cfg.display->width()-1, (door_sm.cfg.display->height()-1)*scale_factor,
+        SH110X_WHITE
+    );
+}
+static void halt_with_reason(const char reason[])
+{
+    Serial.println(reason);
+    while(1);
+}
+
+static void halt()
+{
+    while(1);
 }
 //===================================================================
