@@ -491,6 +491,7 @@ static state_hndlr_status_t new_file_enter(state_t *self_ptr, cck_time_t t)
     if (dataFile) {
         dataFile.seek(dataFile.size()); //Move to the end of the file for appending.
         ds_ptr->fileCreated = true;
+        dataFile.println("ax,ay,az,gx,gy,gz");
     } else {
         Serial.print("Error opening file");
         Serial.println(filename);
@@ -638,7 +639,7 @@ static void record_sensor_evt_hndler(door_state_t *self, cck_time_t t, void *con
 
 
 //===================================================================
-// Error State 
+// Error State
 //===================================================================
 static state_hndlr_status_t error_animator(state_t *self_ptr, cck_time_t curTime)
 {
