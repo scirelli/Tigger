@@ -160,7 +160,7 @@ typedef struct {
     door_sm_cfg_t cfg;
 } door_sm_t;
 
-bool door_init_state_machine(door_sm_cfg_t);
+bool door_init_state_machine(door_sm_cfg_t, door_states_id_t state_id = PRE_IDLE);
 bool door_run_state_machine(cck_time_t);
 bool door_fire_event(state_event_id_t, cck_time_t, void* context=NULL);
 bool door_set_event_handle(door_states_id_t, door_events_t, door_event_handler_t);
@@ -169,6 +169,7 @@ bool door_set_enter_handle(door_states_id_t, stateEnterHandler_t);
 bool door_set_exit_handle(door_states_id_t, stateExitHandler_t);
 door_state_t* door_get_state(door_states_id_t);
 bool door_set_next_state(door_states_id_t, door_state_t*);
+void set_error_msg(const char *msg); //Requires the EEYOR state
 
 
 

@@ -163,10 +163,16 @@ static door_state_container_t door_states[_DOOR_STATE_COUNT] = {
 //===================================================================
 // Door SM State functions
 //===================================================================
-bool door_init_state_machine(door_sm_cfg_t config)
+bool door_init_state_machine(door_sm_cfg_t config, door_states_id_t state_id)
 {
     door_sm.cfg = config;
-    return state_init_machine(&door_sm.sm, &door_states[PRE_IDLE].generic);
+    door_state_t *s= door_get_state(state_id);
+    if(!s){
+        s = door_get_state(EEYORE);
+        set_error_msg("Init error");
+    }
+    if(!s) return false;
+    return state_init_machine(&door_sm.sm, &s->base_state);
 }
 
 bool door_run_state_machine(cck_time_t t)
@@ -667,6 +673,8 @@ static state_hndlr_status_t error_enter(state_t *self_ptr, cck_time_t t)
     door_sm.cfg.display->setTextSize(1);
     if(ds_ptr->error_msg) {
         display_center(ds_ptr->error_msg);
+    } else {
+        Serial.println("No error message");
     }
     display_bot_center("Press btn to reset");
     door_sm.cfg.display->display();
@@ -682,6 +690,11 @@ static state_hndlr_status_t error_exit(state_t *self_ptr, cck_time_t t)
 static void error_btn1_prs_hndler(door_state_t *self, cck_time_t t, void *context)
 {
     fire_auto_transition_to(IDLE, t);
+}
+void set_error_msg(const char *msg)
+{
+    door_state_t *s= door_get_state(EEYORE);
+    if(s) ((door_error_state_t*)s)->error_msg = msg;
 }
 //===================================================================
 

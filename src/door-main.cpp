@@ -41,12 +41,12 @@ static button_handle_t btnA, btnB, btnC;
 static Adafruit_NeoPixel builtInNeo(1, BUILT_IN_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 static Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 
-static void setup_accel_and_mag();
-static void setup_sdcard();
+static bool setup_accel_and_mag();
+static bool setup_sdcard();
 static void setup_buttons();
 static void setup_gpio();
 static void setup_neopixels();
-static void setup_state_machine();
+static void setup_state_machine(door_states_id_t);
 static void setup_display();
 
 static void buttonAPress(cck_time_t);
@@ -101,12 +101,13 @@ static void setup_neopixels()
   builtInNeo.show();  // Initialize to 'off'
 }
 
-static void setup_sdcard()
+static bool setup_sdcard()
 {
     if(!SD.begin(SD_DETECT_NONE)) {
-        halt("SD Initialization failed.");
+        return false;
     }
     print_file_list();
+    return true;
 }
 
 static void shutdown_sdcard()
@@ -124,8 +125,8 @@ static void setup_display()
 
   // Show image buffer on the display hardware.
   // Since the buffer is intialized with an Adafruit splashscreen internally, this will display the splashscreen.
-  //display.display();
-  //delay(500);
+  display.display();
+  delay(500);
 
   // Clear the buffer.
   display.clearDisplay();
@@ -143,7 +144,7 @@ static void setup_display()
   delay(1000);
 }
 
-static void setup_accel_and_mag()
+static bool setup_accel_and_mag()
 {
   Serial.println("Adafruit LSM6DS+LIS3MDL test!");
   bool lsm6ds_success, lis3mdl_success;
@@ -153,16 +154,12 @@ static void setup_accel_and_mag()
 
   if (!lsm6ds_success){
     Serial.println("Failed to find LSM6DS chip");
-    display_error("Failed to find LSM6DS chip");
   }
   if (!lis3mdl_success){
     Serial.println("Failed to find LIS3MDL chip");
-    display_error("Failed to find LIS3MDL chip");
   }
   if (!(lsm6ds_success && lis3mdl_success)) {
-    while (1) {
-      delay(10);
-    }
+      return false;
   }
 
   Serial.println("LSM6DS and LIS3MDL Found!");
@@ -332,9 +329,10 @@ static void setup_accel_and_mag()
                           true, // polarity
                           false, // don't latch
                           true); // enabled!
+  return true;
 }
 
-static void setup_state_machine() {
+static void setup_state_machine(door_states_id_t init_state_id) {
     door_sm_cfg_t door_sm_config = {
         .lsm6ds     = &lsm6ds,
         .lis3mdl    = &lis3mdl,
@@ -342,9 +340,8 @@ static void setup_state_machine() {
         .builtInNeo = &builtInNeo,
         .display    = &display
     };
-    if(!door_init_state_machine(door_sm_config)) {
+    if(!door_init_state_machine(door_sm_config, init_state_id)) {
         Serial.println("Error failed to setup door state machine");
-        display_error("Error failed to setup door state machine");
         return;
     }
 }
@@ -354,16 +351,27 @@ static void setup_state_machine() {
 //==========================================================================
 void setup()
 {
+    door_states_id_t init_state = PRE_IDLE;
+
     Serial.begin(SERIAL_BAUD_RATE);
     //TODO: Remove, only used for debugging.
-    while (!Serial) delay(10);
+    //while (!Serial) delay(10);
 
     setup_gpio();
     setup_neopixels();
-    setup_sdcard();
     setup_display();
-    setup_accel_and_mag();
-    setup_state_machine();
+    bool status = setup_sdcard();
+    if(!status) {
+        init_state = EEYORE;
+        set_error_msg("SD Initialization failed.");
+    } else {
+        status = setup_accel_and_mag();
+        if(!status) {
+            init_state = EEYORE;
+            set_error_msg("Failed to setup sensor");
+        }
+    }
+    setup_state_machine(init_state);
 }
 
 void loop(void)
